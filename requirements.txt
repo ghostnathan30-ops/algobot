@@ -1,0 +1,59 @@
+# AlgoBot — Python Dependencies
+# Generated: 2026-02-27
+# Python version: 3.11.x
+#
+# Install command:
+#   conda activate algobot_env
+#   pip install -r requirements.txt
+#
+# Note: numpy, pandas, scipy, matplotlib, jupyter are installed via conda
+# All others via pip
+
+# ── Core Scientific Stack (install via conda, listed here for reference) ──
+# numpy>=1.24.0
+# pandas>=2.0.0
+# scipy>=1.10.0
+# matplotlib>=3.7.0
+
+# ── Financial Backtesting & Analysis ──
+vectorbt>=0.26.0
+pyfolio-reloaded>=0.9.5
+empyrical-reloaded>=0.5.8
+statsmodels>=0.14.0
+
+# ── Technical Indicators ──
+# pandas-ta: dropped — no Python 3.11 compatible release exists (lib skips 3.11 entirely)
+# Replaced by: ta>=0.11.0 (covers EMA, SMA, ATR, RSI, ADX, Donchian — all we need)
+ta>=0.11.0
+
+# ── Data Sources ──
+yfinance>=0.2.36
+fredapi>=0.5.1
+pandas-datareader>=0.10.0
+requests>=2.31.0
+
+# ── Visualization & Reporting ──
+plotly>=5.18.0
+kaleido>=0.2.1
+jinja2>=3.1.0
+nbformat>=5.9.0
+
+# ── Machine Learning (for signal enhancement) ──
+scikit-learn>=1.3.0
+
+# ── Live Trading (install when ready for live phase) ──
+# ib_insync>=0.9.86       # Interactive Brokers API (Phase 5)
+# python-telegram-bot>=20.0  # Telegram alerts (Phase 5)
+
+# ── Utilities ──
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+loguru>=0.7.0
+schedule>=1.2.0
+tqdm>=4.66.0
+colorama>=0.4.6
+tabulate>=0.9.0
+
+# ── Testing ──
+pytest>=7.4.0
+pytest-cov>=4.1.0

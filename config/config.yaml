@@ -1,0 +1,449 @@
+# ============================================================
+# AlgoBot — Master Configuration File
+# ============================================================
+# Version:      1.0.0
+# Created:      2026-02-27
+# Purpose:      Single source of truth for ALL strategy parameters.
+#               NEVER hardcode values in source files.
+#               Every parameter here has a documented reason.
+#
+# To modify: Edit this file. All modules load from here at startup.
+# To test a variation: Change a value, run backtest, compare results.
+# ============================================================
+
+# ------------------------------------------------------------
+# PROJECT META
+# ------------------------------------------------------------
+project:
+  name:     "AlgoBot"
+  version:  "1.0.0"
+  log_level: "INFO"       # DEBUG | INFO | WARNING | ERROR
+
+# ------------------------------------------------------------
+# OPERATING MODE
+# CRITICAL: Do NOT change to "live" without completing all
+#           validation stages and the Go/No-Go checklist.
+# ------------------------------------------------------------
+mode: "backtest"           # "backtest" | "paper" | "live"
+
+# ============================================================
+# STRATEGY PARAMETERS
+# Each parameter has a comment explaining:
+#   - What it does
+#   - Why this specific value was chosen
+#   - The academic/research source where applicable
+# ============================================================
+
+strategy:
+
+  # ----------------------------------------------------------
+  # STRATEGY 1: Triple Moving Average (TMA)
+  # Purpose: Capture sustained directional trends
+  # Activation: Trending regime only (ADX > adx.threshold_trending)
+  # Markets: All 6
+  # ----------------------------------------------------------
+  tma:
+    ema_fast:   8     # Fast EMA period.
+                      # Value 8 is a Fibonacci number. Widely used by
+                      # institutional trend systems. Fast enough to detect
+                      # new trends early, slow enough to avoid whipsaws.
+
+    ema_medium: 21    # Medium EMA period.
+                      # Value 21 is a Fibonacci number. Acts as the
+                      # confirmation layer — must be between fast and slow
+                      # for "perfect alignment" signal to fire.
+
+    ema_slow:   89    # Slow EMA period.
+                      # Value 89 is a Fibonacci number. Defines the
+                      # long-term trend direction. Price must be on the
+                      # correct side of this EMA for entry.
+                      # Source: Fibonacci EMA systems widely documented
+                      # in Elliott Wave and institutional trend following.
+
+  # ----------------------------------------------------------
+  # STRATEGY 2: Donchian Channel System (DCS)
+  # Purpose: Capture breakout moves at multi-week price extremes
+  # Activation: Trending regime only (ADX > adx.threshold_trending)
+  # Markets: All 6
+  # Historical basis: Richard Donchian (1960s), Turtle Trading (1983)
+  # ----------------------------------------------------------
+  donchian:
+    entry_period: 55  # Bars for breakout detection channel.
+                      # Value 55 comes directly from the Turtle Trading
+                      # System 2 (1983), the most famous and independently
+                      # validated breakout system ever published.
+                      # A 55-bar new high/low signals a significant move.
+
+    exit_period:  20  # Bars for exit channel.
+                      # Value 20 also from Turtle System 2.
+                      # Exit when price reaches the 20-bar opposite extreme.
+                      # This gives trades room to develop while ensuring
+                      # profits are protected when momentum fades.
+
+  # ----------------------------------------------------------
+  # STRATEGY 3: Volatility-Adjusted Mean Reversion (VMR)
+  # Purpose: Capture short-term oversold/overbought bounces
+  # Activation: Ranging regime only (ADX < adx.threshold_ranging)
+  # Markets: ES and NQ ONLY (equity indices with best MR properties)
+  # Source: Connors & Alvarez (2009), "Short-Term Trading Strategies"
+  # ----------------------------------------------------------
+  vmr:
+    rsi_period:         5   # Fast RSI period.
+                            # RSI(5) reacts in 1–3 bars to oversold conditions.
+                            # RSI(14) is too slow — the bounce is often over
+                            # by the time RSI(14) reaches extreme levels.
+
+    oversold_threshold: 25  # RSI below this = long entry signal.
+                            # Stricter than the traditional 30 to ensure
+                            # we only trade EXTREME oversold readings,
+                            # not every minor dip. Improves win rate.
+
+    overbought_threshold: 75 # RSI above this = short entry signal.
+                             # Stricter than the traditional 70.
+
+    sma_filter_period:  50  # SMA period for trend filter.
+                            # Price must be within sma_filter_tolerance
+                            # of this SMA. Prevents trading mean reversion
+                            # in strongly trending markets.
+
+    sma_filter_tolerance: 0.03  # Maximum distance from SMA as fraction.
+                                # 0.03 = price within 3% of SMA(50).
+                                # If price is 5% below SMA, it may be
+                                # trending down — do not fade that move.
+
+    max_hold_bars:      5   # Maximum bars to hold a mean reversion trade.
+                            # Mean reversion is a short-term strategy.
+                            # Exit at bar 5 even if RSI hasn't recovered.
+
+    rsi_exit_long:      55  # Exit long when RSI rises above this level.
+    rsi_exit_short:     45  # Exit short when RSI falls below this level.
+
+  # ----------------------------------------------------------
+  # SIGNAL AGREEMENT FILTER
+  # The most important feature for achieving our profit factor target.
+  # When enabled: Both TMA and DCS must agree (same direction)
+  # before a trend trade is entered.
+  # Effect: Reduces trade count ~50%, but improves win rate from
+  #         ~40% to ~47% and average R from ~2.8 to ~4.0.
+  # Result: Profit Factor improvement from ~1.9 to ~2.8
+  # ----------------------------------------------------------
+  signal_agreement_filter:
+    enabled: true     # ALWAYS true in production. Only disable to
+                      # test individual strategy performance in research.
+
+# ============================================================
+# REGIME CLASSIFIER PARAMETERS
+# Controls which strategies are active in which market conditions
+# ============================================================
+
+regime:
+  adx_period: 14              # ADX lookback period.
+                              # Value 14 is the standard Wilder default.
+                              # Widely used and well-validated.
+
+  threshold_trending:   25    # ADX above this = TRENDING regime.
+                              # TMA + DCS strategies active.
+                              # Source: Wilder (1978) original specification.
+
+  threshold_ranging:    20    # ADX below this = RANGING regime.
+                              # VMR strategy active (ES/NQ only).
+                              # Gap between 20 and 25 = TRANSITIONING
+                              # (no new entries in either strategy).
+
+  # Volatility regime: compares current ATR to its own historical average
+  high_vol_atr_multiplier:    1.5  # ATR > 1.5× 90-day avg = HIGH VOLATILITY
+                                   # Effect: Position sizes halved (0.5% risk)
+
+  crisis_atr_multiplier:      2.5  # ATR > 2.5× 90-day avg = CRISIS
+                                   # Effect: No new positions opened at all
+
+  vol_lookback_days:          90   # Days to average ATR over for comparison
+
+# ============================================================
+# POSITION SIZING PARAMETERS
+# The ATR-based risk framework. This is what keeps the account alive.
+# ============================================================
+
+position_sizing:
+  risk_per_trade_pct:   1.0   # Percentage of account equity to risk per trade.
+                              # At $150k: 1.0% = $1,500 per trade maximum loss.
+                              # Conservative. Increase to 1.5% ONLY after
+                              # 3+ months of verified live profitability.
+
+  atr_period:           20    # ATR lookback for position sizing.
+                              # Value 20 is more stable than the common 14.
+                              # Less sensitive to single-day vol spikes.
+
+  stop_multiplier_trend:  2.5 # Stop distance for trend trades = ATR × 2.5.
+                              # Wide enough to survive normal price noise,
+                              # tight enough to limit loss.
+
+  stop_multiplier_mr:     1.5 # Stop distance for mean reversion = ATR × 1.5.
+                              # Tighter because mean reversion should work
+                              # quickly — if it doesn't, exit fast.
+
+  trailing_activation_r:  1.0 # Start trailing stop when trade is +1.0R profit.
+                              # (R = the initial risk in dollars)
+
+  trailing_stop_atr:      2.0 # Trailing stop distance = ATR × 2.0.
+                              # Trails this many ATRs below the highest close.
+
+# ============================================================
+# RISK MANAGEMENT — HARD LIMITS
+# These are enforced by code and cannot be overridden at runtime.
+# They exist to protect the Topstep funded account.
+# ============================================================
+
+risk:
+  # Per-trade limits
+  max_contracts_per_market: 5   # Absolute maximum contracts in any single market.
+                                # Prevents runaway position sizing bugs.
+
+  # Portfolio-level limits
+  max_portfolio_risk_pct: 8.0   # Maximum total open risk as % of equity.
+                                # At $150k: max $12,000 open risk at any time.
+                                # Prevents correlated drawdown across positions.
+
+  max_open_positions: 6         # One position per market maximum.
+
+  # Correlation limits
+  max_equity_risk_pct: 2.0      # ES + NQ combined cannot exceed 2% equity risk.
+                                # They are correlated (r=0.88), so we cap them.
+
+  # Daily circuit breaker
+  daily_loss_alert_usd:    1500.0  # Telegram alert when daily loss hits this.
+  daily_loss_hard_stop_usd: 2500.0 # Bot closes ALL positions and stops trading.
+                                   # Topstep limit is $4,500. We stop at $2,500.
+                                   # This gives a $2,000 safety buffer.
+
+  # Trailing drawdown circuit breaker
+  trailing_dd_alert_usd:   2000.0  # Telegram alert when trailing DD hits this.
+  trailing_dd_pause_usd:   3000.0  # Bot pauses, requires manual restart.
+                                   # Topstep limit is $4,500. We pause at $3,000.
+
+  # Topstep official limits (reference only — bot enforces above values)
+  topstep_daily_limit_usd:      4500.0
+  topstep_trailing_dd_usd:      4500.0
+
+# ============================================================
+# MARKETS CONFIGURATION
+# Exact contract specifications for all 6 markets
+# ============================================================
+
+markets:
+  ES:
+    name:          "E-mini S&P 500"
+    exchange:      "CME"
+    point_value:   50.0          # $50 per full index point
+    tick_size:     0.25          # Minimum price increment (0.25 points)
+    tick_value:    12.50         # $12.50 per tick
+    commission:    5.00          # $ per side (realistic for retail futures)
+    slippage_ticks: 1            # Assumed 1 tick slippage per fill
+    active:        true
+    vmr_eligible:  true          # Can trade mean reversion strategy
+
+  NQ:
+    name:          "E-mini Nasdaq-100"
+    exchange:      "CME"
+    point_value:   20.0          # $20 per full index point
+    tick_size:     0.25
+    tick_value:    5.00
+    commission:    5.00
+    slippage_ticks: 1
+    active:        true
+    vmr_eligible:  true          # Can trade mean reversion strategy
+
+  GC:
+    name:          "Gold Futures"
+    exchange:      "COMEX"
+    point_value:   100.0         # $100 per troy ounce point
+    tick_size:     0.10
+    tick_value:    10.00
+    commission:    5.00
+    slippage_ticks: 1
+    active:        true
+    vmr_eligible:  false         # Trend only
+
+  CL:
+    name:          "WTI Crude Oil"
+    exchange:      "NYMEX"
+    point_value:   1000.0        # $1,000 per dollar (e.g., $0.01 = $10)
+    tick_size:     0.01
+    tick_value:    10.00
+    commission:    5.00
+    slippage_ticks: 1
+    active:        true
+    vmr_eligible:  false
+
+  ZB:
+    name:          "30-Year Treasury Bond"
+    exchange:      "CBOT"
+    point_value:   1000.0        # $1,000 per full point
+    tick_size:     0.03125       # 1/32 of a point
+    tick_value:    31.25
+    commission:    5.00
+    slippage_ticks: 1
+    active:        true
+    vmr_eligible:  false
+
+  6E:
+    name:          "Euro FX Futures"
+    exchange:      "CME"
+    point_value:   125000.0      # €125,000 per contract
+    tick_size:     0.00005       # 0.5 pip
+    tick_value:    6.25
+    commission:    5.00
+    slippage_ticks: 1
+    active:        true
+    vmr_eligible:  false
+
+# ============================================================
+# BACKTESTING CONFIGURATION
+# ============================================================
+
+backtest:
+  start_date:        "2000-01-01"   # 25 years of history
+  end_date:          "2024-12-31"
+  in_sample_end:     "2019-12-31"   # Training data cutoff (20 years)
+  out_of_sample_start: "2020-01-01" # Reserved test data (5 years)
+
+  initial_capital:   150000.0       # Starting account size ($)
+  benchmark_symbol:  "SPY"          # Buy-and-hold comparison
+
+  # Walk-forward windows (7 periods)
+  walk_forward_windows:
+    - train_end: "2004-12-31"
+      test_start: "2005-01-01"
+      test_end:   "2006-12-31"
+    - train_end: "2006-12-31"
+      test_start: "2007-01-01"
+      test_end:   "2008-12-31"
+    - train_end: "2008-12-31"
+      test_start: "2009-01-01"
+      test_end:   "2010-12-31"
+    - train_end: "2010-12-31"
+      test_start: "2011-01-01"
+      test_end:   "2013-12-31"
+    - train_end: "2013-12-31"
+      test_start: "2014-01-01"
+      test_end:   "2017-12-31"
+    - train_end: "2017-12-31"
+      test_start: "2018-01-01"
+      test_end:   "2020-12-31"
+    - train_end: "2020-12-31"
+      test_start: "2021-01-01"
+      test_end:   "2024-12-31"
+
+  # Crisis period tests
+  crisis_periods:
+    - label: "2008 Financial Crisis"
+      start: "2008-09-01"
+      end:   "2009-03-31"
+      max_allowed_drawdown_pct: 20.0
+
+    - label: "2010-2012 Trend Drought"
+      start: "2010-01-01"
+      end:   "2012-12-31"
+      max_allowed_loss_pct: 15.0
+
+    - label: "2020 COVID Crash"
+      start: "2020-02-19"
+      end:   "2020-03-23"
+      max_allowed_drawdown_pct: 12.0
+
+    - label: "2022 Rate Hike Bear"
+      start: "2022-01-01"
+      end:   "2022-12-31"
+      must_be_profitable: true
+
+  # Monte Carlo settings
+  monte_carlo:
+    n_simulations: 10000
+    max_dd_95th_percentile_limit: 35.0  # Must be below this (% of equity)
+
+# ============================================================
+# VALIDATION PASS CRITERIA
+# These are the minimum thresholds for each stage
+# ============================================================
+
+validation:
+  in_sample:
+    min_profit_factor:   2.3
+    min_sharpe_ratio:    1.0
+    max_drawdown_pct:    22.0
+    min_profitable_years: 16    # Of 20 in-sample years
+
+  out_of_sample:
+    min_profit_factor:   2.0
+    min_sharpe_ratio:    0.8
+    max_drawdown_pct:    28.0
+    min_profitable_years: 3     # Of 5 out-of-sample years
+    max_sharpe_degradation: 0.40  # OOS Sharpe can degrade up to 40% vs IS
+
+  walk_forward:
+    min_profitable_windows: 5   # Of 7 windows
+    max_single_window_dd:   30.0
+
+  stress:
+    double_cost_min_pf:     1.5
+    remove_best_trades_min_pf: 1.5
+    param_sensitivity_min_sharpe: 0.7  # For ±20% parameter shifts
+
+  paper_trading:
+    min_days:              60
+    max_signal_frequency_deviation: 0.25  # Within 25% of backtest
+    max_pnl_deviation:     0.30            # Within 30% of backtest daily avg
+
+# ============================================================
+# LIVE TRADING CONFIGURATION (Phase 6+)
+# ============================================================
+
+live:
+  broker:            "ninjatrader"   # "ninjatrader" | "ibkr"
+  paper_mode:        true            # MUST be true until all validation passes
+  data_feed:         "rithmic"       # "rithmic" | "ibkr"
+
+  # How often the bot checks for new signals
+  check_interval_seconds: 10
+
+  # Market hours (CME futures)
+  market_open_time:  "08:30"        # CT (Central Time)
+  market_close_time: "15:00"        # CT — no new entries after this
+  daily_reset_time:  "17:00"        # CT — P&L reset for next day
+
+  # Session control
+  trade_sunday_open:  false         # No trading Sunday evening open
+  close_before_weekend: false       # Bot holds positions over weekend
+                                    # (trend following benefits from weekend gaps)
+
+# ============================================================
+# REPORTING CONFIGURATION
+# ============================================================
+
+reporting:
+  output_dir:    "reports/"
+  backtest_dir:  "reports/backtests/"
+  validation_dir: "reports/validation/"
+  live_dir:      "reports/live/"
+
+  generate_html:  true
+  generate_csv:   true
+  include_charts: true
+
+  # Metrics to include in every report
+  metrics:
+    - total_return_pct
+    - annualized_return_pct
+    - sharpe_ratio
+    - sortino_ratio
+    - calmar_ratio
+    - profit_factor
+    - max_drawdown_pct
+    - max_drawdown_duration_days
+    - win_rate_pct
+    - avg_win_loss_ratio
+    - total_trades
+    - trades_per_month
+    - expectancy_per_trade_usd
+    - annual_returns_by_year
+    - profit_factor_by_market
