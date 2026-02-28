@@ -26,6 +26,9 @@ statsmodels>=0.14.0
 # Replaced by: ta>=0.11.0 (covers EMA, SMA, ATR, RSI, ADX, Donchian — all we need)
 ta>=0.11.0
 
+# ── Data Storage ──
+pyarrow>=14.0.0         # Parquet file support for data caching
+
 # ── Data Sources ──
 yfinance>=0.2.36
 fredapi>=0.5.1
