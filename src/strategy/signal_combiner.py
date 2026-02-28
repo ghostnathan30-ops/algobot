@@ -1,47 +1,46 @@
 """
-AlgoBot — Signal Combiner & Agreement Filter
-=============================================
+AlgoBot — Signal Combiner, Agreement Filter & HTF Bias Gate
+=============================================================
 Module:  src/strategy/signal_combiner.py
-Phase:   2 — Strategy Signals
+Phase:   2 (original) / 5 (updated with MTF bias gate)
 Purpose: Combines TMA, DCS, and VMR signals using the Signal Agreement Filter.
-         This is the PRIMARY mechanism that targets Profit Factor 2.5+.
+         Phase 5 adds the Higher-Timeframe Bias Gate as an outer filter:
+         only signals aligned with the weekly/monthly trend are passed through.
+
+PHASE 5 CHANGES:
+  1. HTF Bias Gate added: all signals must align with htf_combined_bias.
+       AGREE_LONG  blocked when htf_combined_bias == BEAR
+       AGREE_SHORT blocked when htf_combined_bias == BULL
+       VMR_LONG    blocked when htf_weekly_bias   == BEAR (weekly is enough)
+  2. VMR SHORT disabled: controlled by config.strategy.vmr.vmr_short_enabled.
+       Set to false in Phase 5 because IS backtest showed VMR SHORT PF=0.76.
+       VMR LONG (oversold bounces) is retained — it has positive expectancy.
+  3. combine_signals() now accepts optional config parameter.
+       If config=None, HTF bias gate is skipped (backward-compatible).
 
 The Signal Agreement Filter (the core edge):
   A trend trade is ONLY executed when BOTH TMA AND DCS agree.
-  VMR trades execute independently (it is a separate bet on range reversion).
+  VMR trades execute independently (a separate bet on range reversion).
 
-  Why does this work?
-    Individual systems:
-      TMA alone:  Win rate ~45%, avg win/loss = 3.0 -> PF = (0.45 x 3.0) / (0.55 x 1.0) = 2.45
-      DCS alone:  Win rate ~43%, avg win/loss = 3.5 -> PF = (0.43 x 3.5) / (0.57 x 1.0) = 2.64
-      VMR alone:  Win rate ~55%, avg win/loss = 1.5 -> PF = (0.55 x 1.5) / (0.45 x 1.0) = 1.83
+  Individual systems (estimated):
+    TMA alone:  Win rate ~45%, avg win/loss = 3.0 -> PF ~ 2.45
+    DCS alone:  Win rate ~43%, avg win/loss = 3.5 -> PF ~ 2.64
+    VMR alone:  Win rate ~55%, avg win/loss = 1.5 -> PF ~ 1.83
 
-    Agreement filter:
-      When TMA+DCS both agree: Win rate improves to ~58%, avg win/loss = 4.2
-      PF = (0.58 x 4.2) / (0.42 x 1.0) = 5.80 in isolation
+  Agreement filter (both must agree):
+    Win rate ~58%, avg win/loss = 4.2 -> PF ~ 5.80 in isolation
+    Blended PF target with VMR: 2.5-3.0
 
-    BUT: fewer signals (only the overlapping bars). Combined with VMR:
-      Blended PF target: 2.5-3.0 (after realistic costs and drawdowns)
+  HTF Bias Gate (Phase 5 addition):
+    Removes counter-trend entries and VMR SHORT into bull markets.
+    Estimated additional PF improvement: +0.3 to +0.6 over Phase 4.
 
-  The intuition: When two independent trend-detection methods BOTH say
-  "the trend is up," they are providing mutual confirmation. Each system
-  sees the trend from a different mathematical angle. Their intersection
-  is a much higher-quality signal than either alone.
-
-Trade types and their rules:
-  AGREE_LONG:  TMA=+1 AND DCS=+1 AND trend_active=True
-  AGREE_SHORT: TMA=-1 AND DCS=-1 AND trend_active=True
-  VMR_LONG:    VMR=+1 AND vmr_active=True AND market in VMR_MARKETS
-  VMR_SHORT:   VMR=-1 AND vmr_active=True AND market in VMR_MARKETS
-  NO_TRADE:    None of the above conditions met
-
-Signal combination logic:
-  If regime allows trend AND TMA+DCS agree -> TREND trade (AGREE_LONG/SHORT)
-  Elif regime allows VMR AND market is ES/NQ AND VMR fires -> VMR trade
-  Else -> NO_TRADE
-
-  Note: Trend takes priority over VMR. If both fire simultaneously
-  (rare during transitions), the trend signal wins.
+Trade types:
+  AGREE_LONG:  TMA=+1 AND DCS=+1 AND trend_active AND htf != BEAR
+  AGREE_SHORT: TMA=-1 AND DCS=-1 AND trend_active AND htf != BULL
+  VMR_LONG:    VMR=+1 AND vmr_active AND market ES/NQ AND weekly != BEAR
+  VMR_SHORT:   DISABLED (vmr_short_enabled=false in config)
+  NO_TRADE:    None of the above
 """
 
 from dataclasses import dataclass
@@ -56,6 +55,11 @@ from src.strategy.vmr_signal import VMR_MARKETS
 
 log = get_logger(__name__)
 
+# HTF bias constant values (must match htf_bias.py)
+_BULL    = "BULL"
+_BEAR    = "BEAR"
+_NEUTRAL = "NEUTRAL"
+
 
 # ── Signal direction enum ─────────────────────────────────────────────────────
 
@@ -64,7 +68,7 @@ class SignalDirection(str, Enum):
     AGREE_LONG  = "AGREE_LONG"   # TMA+DCS both long — trend trade
     AGREE_SHORT = "AGREE_SHORT"  # TMA+DCS both short — trend trade
     VMR_LONG    = "VMR_LONG"     # Mean reversion long (ES/NQ only)
-    VMR_SHORT   = "VMR_SHORT"    # Mean reversion short (ES/NQ only)
+    VMR_SHORT   = "VMR_SHORT"    # Mean reversion short — DISABLED in Phase 5
     NO_TRADE    = "NO_TRADE"     # No valid signal this bar
 
 
@@ -76,25 +80,27 @@ class CombinedSignal:
     Result of signal combination for a single bar.
     Passed to position_sizer and then to the backtesting engine.
     """
-    direction:        SignalDirection
-    tma_signal:       int    = 0     # Raw TMA: +1, 0, -1
-    dcs_signal:       int    = 0     # Raw DCS: +1, 0, -1
-    vmr_signal:       int    = 0     # Raw VMR: +1, 0, -1
-    regime:           str    = ""    # Regime state string
-    size_multiplier:  float  = 0.0   # From regime (1.0, 0.5, or 0.0)
-    is_new_entry:     bool   = False # True only on first bar of a new signal
-    is_trend:         bool   = False # True for AGREE_LONG/AGREE_SHORT
-    is_mean_reversion: bool  = False # True for VMR_LONG/VMR_SHORT
+    direction:         SignalDirection
+    tma_signal:        int    = 0      # Raw TMA: +1, 0, -1
+    dcs_signal:        int    = 0      # Raw DCS: +1, 0, -1
+    vmr_signal:        int    = 0      # Raw VMR: +1, 0, -1
+    regime:            str    = ""     # Regime state string
+    size_multiplier:   float  = 0.0    # From regime (1.0, 0.5, or 0.0)
+    is_new_entry:      bool   = False  # True only on first bar of new signal
+    is_trend:          bool   = False  # True for AGREE_LONG/AGREE_SHORT
+    is_mean_reversion: bool   = False  # True for VMR_LONG/VMR_SHORT
+    htf_blocked:       bool   = False  # True if HTF bias gate blocked this bar
 
     def __post_init__(self):
-        self.is_trend         = self.direction in (SignalDirection.AGREE_LONG,
-                                                   SignalDirection.AGREE_SHORT)
+        self.is_trend          = self.direction in (SignalDirection.AGREE_LONG,
+                                                    SignalDirection.AGREE_SHORT)
         self.is_mean_reversion = self.direction in (SignalDirection.VMR_LONG,
                                                     SignalDirection.VMR_SHORT)
 
     def __str__(self) -> str:
+        htf_str = " [HTF-BLOCKED]" if self.htf_blocked else ""
         return (
-            f"{self.direction.value} | "
+            f"{self.direction.value}{htf_str} | "
             f"TMA={self.tma_signal:+d} DCS={self.dcs_signal:+d} VMR={self.vmr_signal:+d} | "
             f"Regime={self.regime} | size={self.size_multiplier:.1f}x | "
             f"{'NEW' if self.is_new_entry else 'cont'}"
@@ -106,41 +112,35 @@ class CombinedSignal:
 def combine_signals(
     df: pd.DataFrame,
     market: str = "UNKNOWN",
+    config: Optional[dict] = None,
 ) -> pd.DataFrame:
     """
-    Apply the Signal Agreement Filter to produce final combined signals.
+    Apply the Signal Agreement Filter + HTF Bias Gate to produce final signals.
 
-    Requires all of the following to have been called first:
-      - calculate_indicators()
-      - add_atr_baseline()
-      - classify_regimes()
-      - tma_signal()
-      - dcs_signal()
-      - vmr_signal()
+    Call order (all must run before this):
+      calculate_indicators() -> add_atr_baseline() -> classify_regimes()
+      -> tma_signal() -> dcs_signal() -> vmr_signal()
+      -> add_htf_bias()   [optional, Phase 5 — skipped if columns absent]
 
     Args:
-        df:     DataFrame with all signal and regime columns
-        market: Market code for logging
+        df:      DataFrame with all signal and regime columns.
+        market:  Market code for logging ("ES", "NQ", etc.).
+        config:  Full config dict. If None, HTF gate is skipped (backward
+                 compatible with Phase 2-4 tests that don't pass config).
 
     Returns:
         DataFrame with combined signal columns added:
-          combined_signal    - SignalDirection string
-          combined_new_entry - bool: new entry signal this bar
-          combined_is_trend  - bool: trend trade (AGREE_LONG/SHORT)
-          combined_is_vmr    - bool: mean reversion trade
-          combined_size_mult - float: position size multiplier
+          combined_signal      - SignalDirection string value
+          combined_new_entry   - bool: new entry signal this bar
+          combined_is_trend    - bool: trend trade (AGREE_LONG/SHORT)
+          combined_is_vmr      - bool: mean reversion trade
+          combined_size_mult   - float: position size multiplier
+          combined_htf_blocked - bool: True when HTF gate suppressed a signal
 
     Example:
-        df = calculate_indicators(df, cfg, "ES")
-        df = add_atr_baseline(df)
-        df = classify_regimes(df, cfg, "ES")
-        df = tma_signal(df, "ES")
-        df = dcs_signal(df, "ES")
-        df = vmr_signal(df, cfg, "ES")
-        df = combine_signals(df, "ES")
-
+        df = add_htf_bias(df, config, "ES")
+        df = combine_signals(df, "ES", config)
         entries = df[df["combined_new_entry"]]
-        print(f"Total entries: {len(entries)}")
         print(entries["combined_signal"].value_counts())
     """
     required_cols = [
@@ -151,18 +151,43 @@ def combine_signals(
     if missing:
         log.error("{market}: combine_signals missing columns: {cols}",
                   market=market, cols=missing)
-        df["combined_signal"]    = SignalDirection.NO_TRADE.value
-        df["combined_new_entry"] = False
-        df["combined_is_trend"]  = False
-        df["combined_is_vmr"]    = False
-        df["combined_size_mult"] = 0.0
+        df["combined_signal"]      = SignalDirection.NO_TRADE.value
+        df["combined_new_entry"]   = False
+        df["combined_is_trend"]    = False
+        df["combined_is_vmr"]      = False
+        df["combined_size_mult"]   = 0.0
+        df["combined_htf_blocked"] = False
         return df
 
     df = df.copy()
     vmr_allowed = market.upper() in VMR_MARKETS
 
+    # ── Read config flags ──────────────────────────────────────────────────────
+    vmr_short_enabled = True   # default (backward compat)
+    use_htf_gate      = False  # only enabled when config provided AND columns present
+
+    if config is not None:
+        vmr_cfg = config.get("strategy", {}).get("vmr", {})
+        vmr_short_enabled = bool(vmr_cfg.get("vmr_short_enabled", True))
+
+        # Enable HTF gate only if bias columns are present in the DataFrame
+        htf_cols_present = (
+            "htf_combined_bias" in df.columns and
+            "htf_weekly_bias"   in df.columns
+        )
+        use_htf_gate = htf_cols_present
+
+        if not htf_cols_present and config.get("htf_bias") is not None:
+            log.warning(
+                "{market}: HTF bias config present but htf_bias columns not found "
+                "in DataFrame. Run add_htf_bias() before combine_signals(). "
+                "HTF gate will be skipped.",
+                market=market,
+            )
+
+    # ── Bar-by-bar combination ─────────────────────────────────────────────────
     combined_signals  = []
-    combined_new_entry = []
+    htf_blocked_flags = []
 
     for i in range(len(df)):
         row       = df.iloc[i]
@@ -173,27 +198,64 @@ def combine_signals(
         vmr_ok    = bool(row["vmr_active"]) and vmr_allowed
         size_mult = float(row["size_multiplier"])
 
-        # ── Agreement filter: both TMA and DCS must agree ──────────────────────
-        if trend_ok and size_mult > 0:
-            if tma_raw == 1 and dcs_raw == 1:
-                direction = SignalDirection.AGREE_LONG
-            elif tma_raw == -1 and dcs_raw == -1:
-                direction = SignalDirection.AGREE_SHORT
-            elif vmr_ok and vmr_raw == 1:
-                direction = SignalDirection.VMR_LONG
-            elif vmr_ok and vmr_raw == -1:
-                direction = SignalDirection.VMR_SHORT
-            else:
-                direction = SignalDirection.NO_TRADE
-        elif vmr_ok and size_mult > 0 and vmr_raw != 0:
-            # Ranging regime (trend_ok=False, vmr_ok=True)
-            direction = SignalDirection.VMR_LONG if vmr_raw == 1 else SignalDirection.VMR_SHORT
+        # Read HTF bias for this bar (default NEUTRAL if gate disabled)
+        if use_htf_gate:
+            htf_combined = str(row.get("htf_combined_bias", _NEUTRAL))
+            htf_weekly   = str(row.get("htf_weekly_bias",   _NEUTRAL))
         else:
-            direction = SignalDirection.NO_TRADE
+            htf_combined = _NEUTRAL
+            htf_weekly   = _NEUTRAL
+
+        htf_blocked  = False
+        direction    = SignalDirection.NO_TRADE
+
+        if size_mult <= 0:
+            # Crisis regime — no entries regardless of signals
+            combined_signals.append(direction.value)
+            htf_blocked_flags.append(False)
+            continue
+
+        # ── Trend: TMA + DCS agreement filter ────────────────────────────────
+        if trend_ok:
+            if tma_raw == 1 and dcs_raw == 1:
+                # Potential AGREE_LONG — check HTF gate
+                if use_htf_gate and htf_combined == _BEAR:
+                    htf_blocked = True
+                    direction   = SignalDirection.NO_TRADE
+                else:
+                    direction = SignalDirection.AGREE_LONG
+
+            elif tma_raw == -1 and dcs_raw == -1:
+                # Potential AGREE_SHORT — check HTF gate
+                if use_htf_gate and htf_combined == _BULL:
+                    htf_blocked = True
+                    direction   = SignalDirection.NO_TRADE
+                else:
+                    direction = SignalDirection.AGREE_SHORT
+
+        # ── VMR: Mean Reversion (ranging regime) ──────────────────────────────
+        if direction == SignalDirection.NO_TRADE and vmr_ok:
+            if vmr_raw == 1:
+                # VMR LONG — only block in explicit bear weekly trend
+                if use_htf_gate and htf_weekly == _BEAR:
+                    htf_blocked = True
+                else:
+                    direction = SignalDirection.VMR_LONG
+
+            elif vmr_raw == -1:
+                # VMR SHORT — check if enabled
+                if not vmr_short_enabled:
+                    pass  # disabled globally — silent skip
+                elif use_htf_gate and htf_weekly == _BULL:
+                    htf_blocked = True
+                else:
+                    direction = SignalDirection.VMR_SHORT
 
         combined_signals.append(direction.value)
+        htf_blocked_flags.append(htf_blocked)
 
-    df["combined_signal"] = combined_signals
+    df["combined_signal"]      = combined_signals
+    df["combined_htf_blocked"] = htf_blocked_flags
 
     # ── New entry detection ────────────────────────────────────────────────────
     prev_signal = df["combined_signal"].shift(1).fillna(SignalDirection.NO_TRADE.value)
@@ -214,25 +276,24 @@ def combine_signals(
     df["combined_size_mult"] = df["size_multiplier"]
 
     # ── Logging ────────────────────────────────────────────────────────────────
-    entries = df[df["combined_new_entry"]]
     signal_counts = df["combined_signal"].value_counts()
-    total_bars = len(df)
 
     agree_long  = signal_counts.get(SignalDirection.AGREE_LONG.value,  0)
     agree_short = signal_counts.get(SignalDirection.AGREE_SHORT.value, 0)
     vmr_long    = signal_counts.get(SignalDirection.VMR_LONG.value,    0)
     vmr_short   = signal_counts.get(SignalDirection.VMR_SHORT.value,   0)
-    no_trade    = signal_counts.get(SignalDirection.NO_TRADE.value,     0)
+    no_trade    = signal_counts.get(SignalDirection.NO_TRADE.value,    0)
+    htf_blocks  = int(df["combined_htf_blocked"].sum())
 
     log.info(
-        "{market}: Combined signals over {n} bars | "
-        "AGREE_LONG={al} AGREE_SHORT={as_} VMR_LONG={vl} VMR_SHORT={vs} NO_TRADE={nt} | "
-        "Total new entries: {ne}",
+        "{market}: Combined signals {n} bars | "
+        "AGREE_LONG={al} AGREE_SHORT={as_} VMR_LONG={vl} VMR_SHORT={vs} "
+        "NO_TRADE={nt} | HTF_BLOCKED={hb} | new_entries={ne}",
         market=market,
-        n=total_bars,
+        n=len(df),
         al=agree_long, as_=agree_short,
         vl=vmr_long, vs=vmr_short,
-        nt=no_trade,
+        nt=no_trade, hb=htf_blocks,
         ne=int(df["combined_new_entry"].sum()),
     )
 
@@ -253,9 +314,6 @@ def get_exit_signal(
       Trend (AGREE_LONG/SHORT): Exit when DCS exit fires OR TMA flips
       VMR:                      Exit when RSI returns to neutral (40-60)
 
-    This function is called by the backtesting engine on each bar
-    while a position is open.
-
     Args:
         df:            Full indicator DataFrame
         position_type: "AGREE_LONG", "AGREE_SHORT", "VMR_LONG", "VMR_SHORT"
@@ -270,18 +328,15 @@ def get_exit_signal(
     row = df.iloc[entry_bar]
 
     if position_type == "AGREE_LONG":
-        # Exit trend long: DCS 20-bar exit fires OR TMA flips short
         return bool(row.get("dcs_exit_long", False)) or (int(row.get("tma_signal", 0)) == -1)
 
     elif position_type == "AGREE_SHORT":
         return bool(row.get("dcs_exit_short", False)) or (int(row.get("tma_signal", 0)) == 1)
 
     elif position_type == "VMR_LONG":
-        # Exit VMR long: RSI returns above 40 (reversion complete)
         return bool(row.get("vmr_exit_long", False))
 
     elif position_type == "VMR_SHORT":
-        # Exit VMR short: RSI returns below 60
         return bool(row.get("vmr_exit_short", False))
 
-    return False  # Default: hold
+    return False

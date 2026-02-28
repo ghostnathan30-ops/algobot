@@ -1,0 +1,55 @@
+I want you to only consider this is this implementable to better the algorithm or not
+I am wondering if I will be able to test it myself on a free website that I can have or one that allows access to free live high quality data or that does offer
+it for a reduced cheap premium.
+I want to know if I will be able to lauch the bot, it will start making money for me. i can also adjust the bot and how much it riks and how 
+and when to risk and it can also just run automatically so that it makes the most amount of profit. The bot should be able to gather live data or dusring the backtest
+and automatically start making money.
+I want the bot to be very good and have the best resonning and logic possible so that I can make money daily and the bot has to be as profitable and as safe
+as possible. 
+Is that possible?
+I would like you to answer this first before phase 3 and also tell me if we will be able to test this bot on a platform for free that uses live 
+date or one that is subscription based but that is cheap and that allows to configure the bot, run test and see it perform using paper trading,
+make a lot of trades and see it profit real time, change the risk and increasse and the bot makes mreo money but safely still and manage 
+multiple assets and have a very wel defined sturdy portfolio so that we can make profit for one selected market or all selected market
+and we can tune the bot for small trades, medium trades and big trades depending on what we want andthe bot should let us know if it safe and
+only proceed when it is safe and not take risky trades and stay well within its know limits.
+Is that possible? can we implement this? If yes let's add it to the bot only if it is making it better without making it
+worse from the point it is at. Only take this suggestions into consideration if it will make the bot better and improve the design. i am just thinking
+and giving you my thoughts. you have to let me know if they are valuable, what is good from what is not good and will compromise the bot, and you have the right
+to reject my suggestions if they are not good and we are regressing. Remember I care about the details, the performace and the correct and full implementation
+of the bot and the correct and full testing for it so that we are good and profitable and so that we have a very studry and intelligent bot made
+by you at the best of your abilities and using all the ressources possible at your disposal to make it happen very good.
+
+I also wonder if the bot will take in account the number of people that are trading at any given moment. I want the bot to have acess to all the
+good possible datat it can like volume, orderflow, the news of what is going on around the world at the times that it is trading, how it
+affect the market and possibly if it should affect the bot or not.
+i am just wonderingall these things and please guide my thoughts and place them n the right direction
+I want a very good performing boot. Also, can you keep going from this poijt and so that we can save on the usage. Do you have access to the details you haev created until this point for the 
+bot?
+If not, hpw can we make sure that you have access to alll the previous conversations and all that data when ansering this in a new conversation to save on tokens?
+
+
+
+
+
+
+
+
+
+This is the new part of the suggestions for the next session
+
+Here is the next thing that we will do:
+- We will improve teh trading bot so use another strategy that is more advance and produces better result that are near what we are looking for. We already have a good base for the algorithm so we can modify it and
+make it better and more profitabel. My goa is for the algorithm to have a high winrate using the yearly, montly, weekly, dayly, hourly, 15min, 5 min and 1 min as biases so that we may know who is in control
+of the market, and the uses other confluences to confirm when to enter a trade with the active dominants in the market and then use it at our advantage. This is only a thought and let me 
+know if that makes sense so that we can dd it and how will it impact the bot. I only want the best for the best. It can then make trades on any platoform from the 1 min to the 5 min to the 15 min to the horly to the daily so that we
+can use the bot to swing trade and hold certian positions for days or for multiples hpurs or for minutes to seconds and be very good at it. Then we will intensively backtest it and see if that is realizable and profitabel.
+I want my bot to be profitable long term and also be profitable daily and is very good on any time frame. If we shoudnt do that let me know too.
+That bot has to have all these capacities and be very profitable, portable and easy to use but notheless very powerfull and institutionlike.
+If the bot is not performing as designed, we have to fix it, imprve the implementaion, structure, coding, algorithms, confluemces, biases while only sharpening it and making it more accurate and more secure
+and better while not making it regree.
+tell me if that is possible. If yes, proceed to modify the existing codebase of the algorithm to effectuate that so that we can have a moroe powerful bot. Before doing that, run by me the accurate preditions based on the 
+code that we have and the data that we have right now if we can be profitable with this bot in the future.
+In the end, give me the best thoughts out of this pool, run this and then we can proceed with the implementations and changes of necessary.
+If yes, then we can proceed to the next phase.
+
