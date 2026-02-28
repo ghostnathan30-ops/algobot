@@ -65,23 +65,30 @@ def check_python_version() -> bool:
 def check_conda_environment() -> bool:
     """Verify we are running inside the algobot_env conda environment."""
     header("CHECK 2 — Conda Environment")
-    env_name = os.environ.get("CONDA_DEFAULT_ENV", "")
+    env_name   = os.environ.get("CONDA_DEFAULT_ENV", "")
     env_prefix = os.environ.get("CONDA_PREFIX", "")
+    python_exe = sys.executable  # Full path to the Python binary being used
 
-    info(f"Active environment: {env_name or 'none detected'}")
-    info(f"Environment path: {env_prefix or 'not set'}")
+    info(f"Active environment name: {env_name or 'none detected'}")
+    info(f"Python executable: {python_exe}")
 
+    # Method 1: CONDA_DEFAULT_ENV env var (set when using conda activate)
     if "algobot" in env_name.lower():
-        ok("algobot_env is active")
+        ok("algobot_env is active (via CONDA_DEFAULT_ENV)")
         return True
-    elif env_name:
-        warn(f"Running in '{env_name}' — expected 'algobot_env'")
-        warn("Run: conda activate algobot_env")
-        return False
+
+    # Method 2: Check Python executable path (works when running via full path)
+    if "algobot_env" in python_exe.replace("\\", "/").lower():
+        ok("algobot_env Python confirmed via executable path")
+        return True
+
+    # Neither method detected algobot_env
+    if env_name:
+        warn(f"Running in conda env '{env_name}' — expected 'algobot_env'")
     else:
-        warn("No conda environment detected")
-        warn("Run: conda activate algobot_env")
-        return False
+        warn("Could not confirm algobot_env is active")
+    warn("Ensure you use: C:/Users/ghost/miniconda3/envs/algobot_env/python.exe")
+    return False
 
 
 # ── Check 3: Required libraries ───────────────────────────────────────────────
@@ -90,7 +97,7 @@ def check_libraries() -> bool:
     header("CHECK 3 — Required Libraries")
 
     required = [
-        ("numpy",           "NumPy",            "Scientific computing"),
+        ("numpy",           "NumPy",             "Scientific computing"),
         ("pandas",          "Pandas",            "Data manipulation"),
         ("scipy",           "SciPy",             "Statistical analysis"),
         ("matplotlib",      "Matplotlib",        "Charting"),
@@ -98,8 +105,9 @@ def check_libraries() -> bool:
         ("vectorbt",        "VectorBT",          "Fast backtesting"),
         ("empyrical",       "Empyrical",         "Risk metrics"),
         ("statsmodels",     "StatsModels",       "Statistical models"),
-        ("pandas_ta",       "Pandas-TA",         "Technical indicators"),
-        ("ta",              "TA Library",        "Additional indicators"),
+        # pandas-ta dropped: no Python 3.11 compatible release exists.
+        # Replaced by: ta library (covers all indicators we need)
+        ("ta",              "TA Library",        "Technical indicators (EMA/ATR/RSI/ADX/Donchian)"),
         ("yfinance",        "yFinance",          "Yahoo Finance data"),
         ("fredapi",         "FRED API",          "Macro economic data"),
         ("sklearn",         "Scikit-Learn",      "Machine learning"),
