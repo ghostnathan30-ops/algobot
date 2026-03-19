@@ -1,7 +1,7 @@
 # AlgoBot — Operations Manual
 
-> Last updated: 2026-03-06
-> Version: Phase 6 (Paper Trading Live)
+> Last updated: 2026-03-19
+> Version: Phase 6 + SC Validation (Paper Trading Ready)
 
 ---
 
@@ -152,6 +152,8 @@ AlgoBot/
 
 ## 4. Backtest Results
 
+### Historical (Yahoo Finance in-sample, 2022–2026)
+
 | Strategy | Markets | Period | Trades | Win% | Profit Factor | Max Drawdown |
 |----------|---------|--------|--------|------|--------------|--------------|
 | ORB | ES + NQ | 2022–2026 | ~280 | 62.6% | 2.19 | -$8k |
@@ -160,6 +162,17 @@ AlgoBot/
 | 6E LON | 6E | 2023–2026 | — | 33–39% | 0.58 | — |
 
 > **6E is parked.** EUR/USD ranged 43% of the test period with no edge. Will revisit with 5-year IB data.
+
+### Sierra Charts Real-Data OOS Validation (Nov 2025 – Mar 2026)
+
+| Strategy | Markets | Days | Trades | Win% | Profit Factor | Total P&L | Max DD |
+|----------|---------|------|--------|------|--------------|-----------|--------|
+| FHB | NQ, MNQ, GC, MGC, CL | 18 | 27 | 59.3% | 2.97 | $3,629 | -$957 |
+| ORB | NQ | 14 | 15 | 53.3% | 2.51 | $4,573 | -$1,243 |
+| **Combined** | All | **25** | **42** | **57.1%** | **2.69** | **$8,201** | **-$1,874** |
+
+> **6/6 checks PASSED.** Edge confirmed on real Sierra Charts futures data. Ready for TopStep paper trading.
+> TopStep $50k projections: **+$6,889/month** · **+165% annualised** — see SC Validation tab in dashboard.
 
 ---
 
@@ -213,19 +226,106 @@ cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
 
 ## 7. Starting from Any Terminal
 
-### Git Bash
+> **IMPORTANT — path has spaces.**
+> Always wrap the project path in double-quotes. The path is:
+> `"C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"`
+> PowerShell also requires the `&` call operator before any executable path that contains spaces.
 
-**Start the bot:**
-```bash
-cd "C:/Users/ghost/Documents/Claude Workflow/Trading/AlgoBot"
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" -u scripts/run_paper_trading.py > data/bot.log 2>&1 &
-echo "Bot started. PID: $!"
+---
+
+### PowerShell ✅ (recommended)
+
+> **Rule:** Use `&` before any `.exe` path that contains spaces. Use `$env:PYTHONUTF8=1` to prevent encoding errors on Windows.
+
+**Step 1 — navigate to the project:**
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
 ```
 
-**Start the dashboard (separate terminal tab):**
+**Step 2 — set encoding (prevents Windows cp1252 errors):**
+```powershell
+$env:PYTHONUTF8 = "1"
+```
+
+**Start the dashboard** (keep this window open, then open browser):
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
+```
+Then open your browser to: **http://127.0.0.1:8000**
+
+Or auto-open the browser in a second PowerShell window:
+```powershell
+Start-Process "http://127.0.0.1:8000"
+```
+
+**Start the bot** (open a second PowerShell window for this):
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -u scripts\run_paper_trading.py
+```
+
+**Watch the live log:**
+```powershell
+Get-Content "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot\data\bot.log" -Wait
+```
+
+**Run the SC backtest from PowerShell:**
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_sc_backtest.py
+```
+
+---
+
+### Command Prompt (cmd.exe)
+
+> **Rule:** Use `cd /d` so Windows switches both drive and directory. Use `set PYTHONUTF8=1` for encoding.
+
+**Start the dashboard:**
+```cmd
+cd /d "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+set PYTHONUTF8=1
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
+```
+Then open your browser to: **http://127.0.0.1:8000**
+
+Auto-open browser in a second cmd window:
+```cmd
+start http://127.0.0.1:8000
+```
+
+**Start the bot** (new cmd window):
+```cmd
+cd /d "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+set PYTHONUTF8=1
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -u scripts\run_paper_trading.py
+```
+
+**Watch the live log:**
+```cmd
+type "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot\data\bot.log"
+```
+_(cmd does not have a live `tail`. Use PowerShell `Get-Content -Wait` for live tailing.)_
+
+---
+
+### Git Bash
+
+**Start the dashboard:**
 ```bash
 cd "C:/Users/ghost/Documents/Claude Workflow/Trading/AlgoBot"
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
+PYTHONUTF8=1 "C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
+```
+
+**Start the bot (background):**
+```bash
+cd "C:/Users/ghost/Documents/Claude Workflow/Trading/AlgoBot"
+PYTHONUTF8=1 "C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" -u scripts/run_paper_trading.py > data/bot.log 2>&1 &
+echo "Bot started. PID: $!"
 ```
 
 **Watch the live log:**
@@ -235,47 +335,7 @@ tail -f "C:/Users/ghost/Documents/Claude Workflow/Trading/AlgoBot/data/bot.log"
 
 ---
 
-### PowerShell
-
-**Start the bot:**
-```powershell
-cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
-Start-Process -NoNewWindow "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" `
-  -ArgumentList "-u", "scripts\run_paper_trading.py" `
-  -RedirectStandardOutput "data\bot.log" `
-  -RedirectStandardError "data\bot_err.log"
-```
-
-**Start the dashboard:**
-```powershell
-cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
-& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
-```
-
-**Watch the live log:**
-```powershell
-Get-Content "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot\data\bot.log" -Wait
-```
-
----
-
-### Command Prompt (cmd.exe)
-
-**Start the bot:**
-```cmd
-cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
-"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -u scripts\run_paper_trading.py > data\bot.log 2>&1
-```
-
-**Start the dashboard (new cmd window):**
-```cmd
-cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
-"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
-```
-
----
-
-### Windows Task Scheduler (fully automated — runs every weekday at 09:00 ET)
+### Windows Task Scheduler (fully automated — every weekday 09:00 ET)
 
 ```powershell
 cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
@@ -288,25 +348,74 @@ This registers a Windows task that starts the bot automatically every weekday mo
 
 ## 8. Dashboard
 
-The dashboard shows live bot status, daily P&L, open positions, and historical backtest performance.
+The dashboard shows live bot status, daily P&L, open positions, backtest performance, and Sierra Charts real-data validation.
 
 **URL:** `http://127.0.0.1:8000`
 
-**Start the dashboard server:**
-```bash
-cd "C:/Users/ghost/Documents/Claude Workflow/Trading/AlgoBot"
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
+**Tabs:** Overview · SC Validation · Control Center · Terminal · System Status
+
+---
+
+### Start the dashboard — PowerShell (recommended)
+
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
 ```
 
-**Refresh backtest data on the dashboard:**
-```bash
-cd "C:/Users/ghost/Documents/Claude Workflow/Trading/AlgoBot"
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" scripts/generate_dashboard_data.py
+Then in a second window, open the browser:
+```powershell
+Start-Process "http://127.0.0.1:8000"
 ```
 
-**Change dashboard password:**
-```bash
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" scripts/setup_dashboard_auth.py
+### Start the dashboard — Command Prompt
+
+```cmd
+cd /d "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+set PYTHONUTF8=1
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
+```
+
+Then open browser:
+```cmd
+start http://127.0.0.1:8000
+```
+
+---
+
+**Refresh historical backtest data** (regenerates dashboard charts):
+
+PowerShell:
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\generate_dashboard_data.py
+```
+
+cmd:
+```cmd
+cd /d "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+set PYTHONUTF8=1
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\generate_dashboard_data.py
+```
+
+**Run SC real-data backtest** (updates SC Validation tab):
+
+PowerShell:
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_sc_backtest.py
+```
+
+**Set / change dashboard password** (first-time setup):
+
+PowerShell:
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\setup_dashboard_auth.py
 ```
 
 ---
@@ -354,29 +463,68 @@ gc_reversion:
 
 ## 11. Running Backtests
 
-Run from the project root directory.
+Always `cd` to the project root first. Use `$env:PYTHONUTF8 = "1"` (PowerShell) or `set PYTHONUTF8=1` (cmd) to prevent encoding errors.
 
-**ORB backtest (ES + NQ):**
-```bash
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" scripts/run_orb_backtest.py
+### PowerShell — all backtest commands
+
+```powershell
+cd "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+$env:PYTHONUTF8 = "1"
 ```
 
-**FHB backtest (ES + NQ):**
-```bash
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" scripts/run_fhb_backtest.py
+**SC real-data backtest** (Sierra Charts — OOS validation, recommended first):
+```powershell
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_sc_backtest.py
+```
+
+**FHB backtest (historical Yahoo data):**
+```powershell
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_fhb_backtest.py
+```
+
+**ORB backtest:**
+```powershell
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_orb_backtest.py
 ```
 
 **GC mean-reversion backtest:**
-```bash
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" scripts/run_gc_backtest.py
+```powershell
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_gc_backtest.py
 ```
 
 **Combined backtest (all strategies):**
-```bash
-"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe" scripts/run_combined_backtest.py
+```powershell
+& "C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_combined_backtest.py
 ```
 
-Results are saved to `reports/backtests/`.
+### cmd.exe — all backtest commands
+
+```cmd
+cd /d "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot"
+set PYTHONUTF8=1
+```
+
+**SC real-data backtest:**
+```cmd
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_sc_backtest.py
+```
+
+**FHB backtest:**
+```cmd
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_fhb_backtest.py
+```
+
+**ORB backtest:**
+```cmd
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_orb_backtest.py
+```
+
+**Combined backtest:**
+```cmd
+"C:\Users\ghost\miniconda3\envs\algobot_env\python.exe" scripts\run_combined_backtest.py
+```
+
+Results are saved to `reports/backtests/`. SC results also update the dashboard SC Validation tab automatically.
 
 ---
 
@@ -426,6 +574,18 @@ Either:
 This is normal and expected. The bot is selective by design.
 
 ### Check the live log
+
+PowerShell (live tail):
+```powershell
+Get-Content "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot\data\bot.log" -Wait
+```
+
+Git Bash (live tail):
 ```bash
-tail -f data/bot.log
+tail -f "C:/Users/ghost/Documents/Claude Workflow/Trading/AlgoBot/data/bot.log"
+```
+
+cmd (static dump — no live tail in cmd):
+```cmd
+type "C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot\data\bot.log"
 ```
