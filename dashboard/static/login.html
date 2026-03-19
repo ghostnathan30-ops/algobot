@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlgoBot — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#000000;
+  --glass:rgba(18,18,24,0.88);
+  --border:rgba(255,255,255,0.1);
+  --blue:#0a84ff;
+  --green:#30d158;
+  --red:#ff453a;
+  --t1:#ffffff;
+  --t2:rgba(255,255,255,0.72);
+  --t3:rgba(255,255,255,0.42);
+  --t4:rgba(255,255,255,0.22);
+}
+html,body{
+  height:100%;overflow:hidden;background:var(--bg);color:var(--t2);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+/* Gradient backdrop */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 120% 80% at 20% 0%,rgba(10,132,255,0.09) 0%,transparent 55%),
+    radial-gradient(ellipse 80% 60% at 80% 110%,rgba(48,209,88,0.06) 0%,transparent 50%);
+}
+/* Subtle grid */
+body::after{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,0.018) 1px,transparent 1px);
+  background-size:52px 52px;
+}
+.scene{
+  position:relative;z-index:1;height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2.2rem;padding:2rem;
+}
+/* Brand mark */
+.brand{display:flex;flex-direction:column;align-items:center;gap:.6rem}
+.brand-icon{
+  width:64px;height:64px;border-radius:18px;
+  background:linear-gradient(145deg,rgba(10,132,255,0.22),rgba(48,209,88,0.12));
+  border:1px solid rgba(10,132,255,0.28);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 40px rgba(10,132,255,0.15),0 8px 24px rgba(0,0,0,0.5);
+  animation:float 4.5s ease-in-out infinite;
+}
+.brand-icon svg{width:34px;height:34px}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.brand-name{
+  font-size:1.5rem;font-weight:700;color:var(--t1);
+  letter-spacing:-.025em;
+}
+.brand-sub{
+  font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--t4);
+  letter-spacing:.12em;text-transform:uppercase;
+}
+
+/* Card */
+.card{
+  background:var(--glass);border:1px solid var(--border);border-radius:18px;
+  padding:2.4rem 2.2rem;width:100%;max-width:380px;
+  backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);
+  box-shadow:0 0 0 1px rgba(255,255,255,0.04) inset,0 24px 64px rgba(0,0,0,0.55);
+  animation:fadeUp .5s cubic-bezier(.4,0,.2,1) both .15s;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.card-title{
+  font-size:.72rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--t3);text-align:center;margin-bottom:1.8rem;
+}
+.field{display:flex;flex-direction:column;gap:.35rem;margin-bottom:1rem}
+.field label{font-size:.68rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--t3)}
+.field input{
+  background:rgba(255,255,255,0.05);border:1px solid var(--border);
+  border-radius:9px;padding:.75rem .95rem;color:var(--t1);
+  font-family:'Inter',sans-serif;font-size:.9rem;outline:none;
+  transition:border-color .2s,background .2s;
+}
+.field input:focus{border-color:var(--blue);background:rgba(255,255,255,0.07)}
+.field input::placeholder{color:var(--t4)}
+.btn{
+  width:100%;padding:.82rem;margin-top:.6rem;
+  background:var(--blue);border:none;border-radius:10px;
+  color:#fff;font-family:'Inter',sans-serif;font-size:.88rem;font-weight:600;
+  letter-spacing:.01em;cursor:pointer;
+  transition:opacity .2s,transform .15s;
+  display:flex;align-items:center;justify-content:center;gap:.5rem;
+}
+.btn:hover{opacity:.88}
+.btn:active{transform:scale(0.985)}
+.btn.loading{opacity:.65;pointer-events:none}
+.spinner{
+  width:15px;height:15px;border:2px solid rgba(255,255,255,0.25);
+  border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none;
+}
+.btn.loading .spinner{display:block}
+.btn.loading .btn-txt{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.err{
+  background:rgba(255,69,58,0.1);border:1px solid rgba(255,69,58,0.25);
+  border-radius:8px;padding:.6rem .9rem;font-size:.78rem;color:#ff7575;
+  margin-top:.9rem;display:none;animation:shake .3s ease;
+}
+.err.show{display:block}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+</style>
+</head>
+<body>
+<div class="scene">
+  <div class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="14" width="30" height="20" rx="5" stroke="#0a84ff" stroke-width="2.2"/>
+        <circle cx="15" cy="24" r="3.5" fill="#0a84ff"/>
+        <circle cx="25" cy="24" r="3.5" fill="#0a84ff"/>
+        <path d="M15 14v-3a5 5 0 0 1 10 0v3" stroke="#0a84ff" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M12 30h16" stroke="#30d158" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="brand-name">AlgoBot</div>
+    <div class="brand-sub">Algorithmic Trading System v2.1</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Sign In</div>
+    <form id="form" onsubmit="login(event)">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="u" placeholder="Enter username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="p" placeholder="Enter password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn" id="btn">
+        <div class="spinner"></div>
+        <span class="btn-txt">Continue</span>
+      </button>
+    </form>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<script>
+async function login(e){
+  e.preventDefault();
+  const btn=document.getElementById('btn'),err=document.getElementById('err');
+  btn.classList.add('loading');err.classList.remove('show');
+  try{
+    const r=await fetch('/auth/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({username:document.getElementById('u').value,password:document.getElementById('p').value})
+    });
+    const d=await r.json();
+    if(r.ok&&d.ok){location.href='/'}
+    else{err.textContent=d.error||'Authentication failed.';err.classList.add('show')}
+  }catch{
+    err.textContent='Connection error. Try again.';err.classList.add('show')
+  }finally{
+    btn.classList.remove('loading')
+  }
+}
+</script>
+</body>
+</html>

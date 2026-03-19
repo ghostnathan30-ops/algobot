@@ -355,7 +355,28 @@ class BacktestEngine:
             )
             return
 
-        # ── 2. Trailing stop hit ───────────────────────────────────────────────
+        # ── 2. Profit target hit (Phase 6+ — fixed R exit for trend trades) ─────
+        if pos.stop_dist > 0 and pos.profit_target_r > 0 and pos.strategy == "TREND":
+            if pos.direction == "LONG":
+                target_price = pos.entry_price_adj + pos.stop_dist * pos.profit_target_r
+                if bar_high >= target_price:
+                    slippage_delta = target_price * SLIPPAGE_PCT_PER_SIDE
+                    self._close_position(
+                        market, ts, bar_idx, target_price - slippage_delta,
+                        "profit_target", exit_price_raw=target_price,
+                    )
+                    return
+            else:
+                target_price = pos.entry_price_adj - pos.stop_dist * pos.profit_target_r
+                if bar_low <= target_price:
+                    slippage_delta = target_price * SLIPPAGE_PCT_PER_SIDE
+                    self._close_position(
+                        market, ts, bar_idx, target_price + slippage_delta,
+                        "profit_target", exit_price_raw=target_price,
+                    )
+                    return
+
+        # ── 3. Trailing stop hit ───────────────────────────────────────────────
         if pos.trailing_active and pos.trailing_stop_price is not None:
             ts_hit = False
             if pos.direction == "LONG" and bar_low <= pos.trailing_stop_price:
@@ -398,18 +419,18 @@ class BacktestEngine:
         """
         sig = pos.signal_source
 
-        if sig in ("AGREE_LONG", "AGREE_SHORT"):
+        if sig in ("AGREE_LONG", "PB_LONG"):
             # Trend exit: DCS 20-bar channel exit OR TMA flip
-            if sig == "AGREE_LONG":
-                if row.get("dcs_exit_long", False):
-                    return "dcs_exit"
-                if int(row.get("tma_signal", 0)) == -1:
-                    return "tma_flip"
-            elif sig == "AGREE_SHORT":
-                if row.get("dcs_exit_short", False):
-                    return "dcs_exit"
-                if int(row.get("tma_signal", 0)) == 1:
-                    return "tma_flip"
+            if row.get("dcs_exit_long", False):
+                return "dcs_exit"
+            if int(row.get("tma_signal", 0)) == -1:
+                return "tma_flip"
+
+        elif sig in ("AGREE_SHORT", "PB_SHORT"):
+            if row.get("dcs_exit_short", False):
+                return "dcs_exit"
+            if int(row.get("tma_signal", 0)) == 1:
+                return "tma_flip"
 
         elif sig in ("VMR_LONG", "VMR_SHORT"):
             # VMR exit: RSI recovery OR max hold timeout
@@ -465,7 +486,7 @@ class BacktestEngine:
         if position_size <= 0 or stop_dist <= 0:
             return
 
-        direction    = "LONG" if signal in ("AGREE_LONG", "VMR_LONG") else "SHORT"
+        direction    = "LONG" if signal in ("AGREE_LONG", "VMR_LONG", "PB_LONG") else "SHORT"
         entry_price  = float(row["Close"])
         atr          = float(row.get("atr", 0.0))
 
@@ -523,6 +544,11 @@ class BacktestEngine:
         else:
             r_activation = entry_price_adj - stop_dist * trail_act_r
 
+        # ── Read profit target params from config ──────────────────────────────
+        ps_cfg = self.config.get("position_sizing", {})
+        profit_target_r  = float(ps_cfg.get("profit_target_r",   2.5))
+        breakeven_move_r = float(ps_cfg.get("breakeven_move_r",  1.5))
+
         # ── Open the position ──────────────────────────────────────────────────
         self._trade_counter += 1
         pos = OpenPosition(
@@ -542,6 +568,9 @@ class BacktestEngine:
             regime_at_entry=str(row.get("regime", "")),
             size_multiplier=size_mult,
             atr_at_entry=atr,
+            stop_dist=stop_dist,
+            profit_target_r=profit_target_r if strategy == "TREND" else 0.0,
+            breakeven_move_r=breakeven_move_r if strategy == "TREND" else 0.0,
         )
         pos.r_activation_level = r_activation
         self.open_positions[market] = pos
@@ -598,12 +627,38 @@ class BacktestEngine:
     # ── Private: trailing stop update ────────────────────────────────────────
 
     def _update_trailing_stop(self, pos: OpenPosition, row: pd.Series):
-        """Update trailing stop price based on new highest/lowest close."""
+        """Update trailing stop price and check breakeven trigger."""
         trail_atr_mult = float(
             self.config.get("position_sizing", {}).get("trailing_stop_atr", 2.0)
         )
         atr = float(row.get("atr", pos.atr_at_entry))
         bar_close = float(row["Close"])
+
+        # ── Breakeven trigger: move stop to entry when breakeven_move_r is hit ─
+        if (
+            not pos.breakeven_activated
+            and pos.stop_dist > 0
+            and pos.breakeven_move_r > 0
+            and pos.strategy == "TREND"
+        ):
+            if pos.direction == "LONG":
+                be_trigger = pos.entry_price_adj + pos.stop_dist * pos.breakeven_move_r
+                if bar_close >= be_trigger:
+                    pos.stop_price = max(pos.stop_price, pos.entry_price_adj)
+                    pos.breakeven_activated = True
+                    log.debug(
+                        "{market}: Breakeven triggered at {r:.1f}R — stop moved to {s:.4f}",
+                        market=pos.market, r=pos.breakeven_move_r, s=pos.stop_price,
+                    )
+            else:
+                be_trigger = pos.entry_price_adj - pos.stop_dist * pos.breakeven_move_r
+                if bar_close <= be_trigger:
+                    pos.stop_price = min(pos.stop_price, pos.entry_price_adj)
+                    pos.breakeven_activated = True
+                    log.debug(
+                        "{market}: Breakeven triggered at {r:.1f}R — stop moved to {s:.4f}",
+                        market=pos.market, r=pos.breakeven_move_r, s=pos.stop_price,
+                    )
 
         trail_distance = atr * trail_atr_mult
 

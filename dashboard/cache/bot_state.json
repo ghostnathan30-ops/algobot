@@ -1,0 +1,23 @@
+{
+  "risk_mode": "safe",
+  "account_override": null,
+  "bot_running": false,
+  "paper_mode": true,
+  "daily_pnl": 0.0,
+  "daily_trades": 0,
+  "daily_wins": 0,
+  "daily_losses": 0,
+  "open_positions": [],
+  "last_updated": "2026-03-18T22:13:16",
+  "strategy_flags": {
+    "vix_filter": true,
+    "econ_filter": true,
+    "gls_gate": true,
+    "htf_bias_gate": true,
+    "half_stop": true,
+    "consecutive_loss_pause": true,
+    "overnight_carry": true,
+    "vwap_filter": true,
+    "delta_filter": true
+  }
+}

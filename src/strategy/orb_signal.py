@@ -312,6 +312,24 @@ def compute_orb_signals(
         else:
             htf_bias = default_htf_bias
 
+        # ── Gap filter: skip day if overnight gap > threshold ──────────────────
+        orb_cfg    = config.get("intraday", {}).get("orb", {})
+        gap_filter = orb_cfg.get("gap_filter_enabled", True)
+        gap_thresh = float(orb_cfg.get("gap_threshold", 0.005))
+        if gap_filter:
+            first_open = float(day_df.iloc[0]["Open"])
+            prev_days  = df[df.index.normalize() < day]
+            if not prev_days.empty:
+                prev_close = float(prev_days.iloc[-1]["Close"])
+                if prev_close > 0:
+                    gap_pct = abs(first_open - prev_close) / prev_close
+                    if gap_pct > gap_thresh:
+                        log.debug(
+                            "{market}: Gap filter — {g:.2%} gap on {d}, skipping ORB",
+                            market=market, g=gap_pct, d=day.date(),
+                        )
+                        continue
+
         # ── Compute opening range for this day ────────────────────────────────
         range_high, range_low = _compute_opening_range(day_df, range_start, range_end)
 

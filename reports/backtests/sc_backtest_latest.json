@@ -1,0 +1,290 @@
+{
+  "generated_at": "2026-03-19T01:24:33.057280",
+  "data_source": "Sierra Charts",
+  "markets_tested": [
+    "NQ",
+    "MNQ",
+    "GC",
+    "MGC",
+    "CL"
+  ],
+  "fhb_by_market": {
+    "NQ": {
+      "market": "NQ",
+      "total_trades": 4,
+      "win_rate_pct": 50.0,
+      "profit_factor": 1.25,
+      "total_net_pnl": 217.5,
+      "avg_daily_pnl": 54.38,
+      "best_day": 692.0,
+      "worst_day": -586.0,
+      "avg_win_usd": 544.0,
+      "avg_loss_usd": -435.25,
+      "avg_r_multiple": 0.188,
+      "partial_rate_pct": 50.0,
+      "max_drawdown_usd": -284.5,
+      "exit_breakdown": {
+        "stop_full": 2,
+        "target_full": 1,
+        "stop_partial": 1
+      },
+      "r_by_exit_type": {
+        "stop_full": -0.6,
+        "stop_partial": 0.35,
+        "target_full": 1.6
+      },
+      "trading_days": 4,
+      "overnight_pct": 0.0,
+      "pf_by_regime": {
+        "RANGING": 0.0,
+        "TRENDING": 3.82
+      },
+      "pf_by_gls_bucket": {
+        "80-100": {
+          "trades": 4,
+          "win_pct": 50.0,
+          "pf": 1.25
+        }
+      },
+      "pf_by_of_score": {
+        "full_confirm": {
+          "trades": 4,
+          "win_pct": 50.0,
+          "pf": 1.25
+        }
+      }
+    },
+    "MNQ": {
+      "market": "MNQ",
+      "total_trades": 9,
+      "win_rate_pct": 66.7,
+      "profit_factor": 2.07,
+      "total_net_pnl": 135.99,
+      "avg_daily_pnl": 15.11,
+      "best_day": 84.6,
+      "worst_day": -61.25,
+      "avg_win_usd": 43.9,
+      "avg_loss_usd": -42.47,
+      "avg_r_multiple": 0.311,
+      "partial_rate_pct": 66.7,
+      "max_drawdown_usd": -127.42,
+      "exit_breakdown": {
+        "stop_partial": 4,
+        "stop_full": 3,
+        "target_full": 2
+      },
+      "r_by_exit_type": {
+        "stop_full": -0.6,
+        "stop_partial": 0.35,
+        "target_full": 1.6
+      },
+      "trading_days": 9,
+      "overnight_pct": 0.0,
+      "pf_by_regime": {
+        "RANGING": 0.0,
+        "TRANSITIONING": null,
+        "TRENDING": 2.69
+      },
+      "pf_by_gls_bucket": {
+        "80-100": {
+          "trades": 9,
+          "win_pct": 66.7,
+          "pf": 2.07
+        }
+      },
+      "pf_by_of_score": {
+        "full_confirm": {
+          "trades": 9,
+          "win_pct": 66.7,
+          "pf": 2.07
+        }
+      }
+    },
+    "GC": {
+      "market": "GC",
+      "total_trades": 2,
+      "win_rate_pct": 100.0,
+      "profit_factor": null,
+      "total_net_pnl": 3063.5,
+      "avg_daily_pnl": 1531.75,
+      "best_day": 2566.0,
+      "worst_day": 497.5,
+      "avg_win_usd": 1531.75,
+      "avg_loss_usd": 0.0,
+      "avg_r_multiple": 0.975,
+      "partial_rate_pct": 100.0,
+      "max_drawdown_usd": 0.0,
+      "exit_breakdown": {
+        "target_full": 1,
+        "stop_partial": 1
+      },
+      "r_by_exit_type": {
+        "stop_partial": 0.35,
+        "target_full": 1.6
+      },
+      "trading_days": 2,
+      "overnight_pct": 0.0,
+      "pf_by_regime": {
+        "CRISIS": null
+      },
+      "pf_by_gls_bucket": {
+        "60-79": {
+          "trades": 2,
+          "win_pct": 100.0,
+          "pf": null
+        }
+      },
+      "pf_by_of_score": {
+        "full_confirm": {
+          "trades": 2,
+          "win_pct": 100.0,
+          "pf": null
+        }
+      }
+    },
+    "MGC": {
+      "market": "MGC",
+      "total_trades": 2,
+      "win_rate_pct": 100.0,
+      "profit_factor": null,
+      "total_net_pnl": 24.97,
+      "avg_daily_pnl": 12.49,
+      "best_day": 22.76,
+      "worst_day": 2.21,
+      "avg_win_usd": 12.49,
+      "avg_loss_usd": 0.0,
+      "avg_r_multiple": 0.975,
+      "partial_rate_pct": 100.0,
+      "max_drawdown_usd": 0.0,
+      "exit_breakdown": {
+        "target_full": 1,
+        "stop_partial": 1
+      },
+      "r_by_exit_type": {
+        "stop_partial": 0.35,
+        "target_full": 1.6
+      },
+      "trading_days": 2,
+      "overnight_pct": 0.0,
+      "pf_by_regime": {
+        "CRISIS": null
+      },
+      "pf_by_gls_bucket": {
+        "60-79": {
+          "trades": 2,
+          "win_pct": 100.0,
+          "pf": null
+        }
+      },
+      "pf_by_of_score": {
+        "full_confirm": {
+          "trades": 2,
+          "win_pct": 100.0,
+          "pf": null
+        }
+      }
+    },
+    "CL": {
+      "market": "CL",
+      "total_trades": 10,
+      "win_rate_pct": 40.0,
+      "profit_factor": 1.22,
+      "total_net_pnl": 186.55,
+      "avg_daily_pnl": 20.73,
+      "best_day": 438.0,
+      "worst_day": -245.0,
+      "avg_win_usd": 257.97,
+      "avg_loss_usd": -140.89,
+      "avg_r_multiple": 0.03,
+      "partial_rate_pct": 40.0,
+      "max_drawdown_usd": -307.5,
+      "exit_breakdown": {
+        "stop_full": 6,
+        "target_full": 2,
+        "stop_partial": 2
+      },
+      "r_by_exit_type": {
+        "stop_full": -0.6,
+        "stop_partial": 0.35,
+        "target_full": 1.6
+      },
+      "trading_days": 9,
+      "overnight_pct": 0.0,
+      "pf_by_regime": {
+        "RANGING": 0.7,
+        "TRENDING": 2.68
+      },
+      "pf_by_gls_bucket": {
+        "60-79": {
+          "trades": 6,
+          "win_pct": 16.7,
+          "pf": 0.7
+        },
+        "80-100": {
+          "trades": 4,
+          "win_pct": 75.0,
+          "pf": 2.68
+        }
+      },
+      "pf_by_of_score": {
+        "partial": {
+          "trades": 1,
+          "win_pct": 0.0,
+          "pf": 0.0
+        },
+        "full_confirm": {
+          "trades": 9,
+          "win_pct": 44.4,
+          "pf": 1.32
+        }
+      }
+    }
+  },
+  "orb_by_market": {
+    "NQ": {
+      "market": "NQ",
+      "total_trades": 15,
+      "win_rate_pct": 53.3,
+      "profit_factor": 2.51,
+      "total_net_pnl": 4572.75,
+      "max_drawdown_usd": -1242.5,
+      "avg_daily_pnl": 326.62
+    }
+  },
+  "fhb_combined": {
+    "label": "FHB (SC)",
+    "total_trades": 27,
+    "win_rate_pct": 59.3,
+    "profit_factor": 2.97,
+    "total_pnl": 3628.51,
+    "max_drawdown": -957.31,
+    "sharpe_daily": 4.79,
+    "trading_days": 18,
+    "avg_daily_pnl": 201.58,
+    "trades_per_day": 1.5
+  },
+  "orb_combined": {
+    "label": "ORB (SC)",
+    "total_trades": 15,
+    "win_rate_pct": 53.3,
+    "profit_factor": 2.51,
+    "total_pnl": 4572.75,
+    "max_drawdown": -1242.5,
+    "sharpe_daily": 5.96,
+    "trading_days": 14,
+    "avg_daily_pnl": 326.62,
+    "trades_per_day": 1.07
+  },
+  "all_combined": {
+    "label": "ALL (SC)",
+    "total_trades": 42,
+    "win_rate_pct": 57.1,
+    "profit_factor": 2.69,
+    "total_pnl": 8201.26,
+    "max_drawdown": -1873.7,
+    "sharpe_daily": 5.99,
+    "trading_days": 25,
+    "avg_daily_pnl": 328.05,
+    "trades_per_day": 1.68
+  }
+}

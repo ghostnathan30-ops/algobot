@@ -42,9 +42,22 @@ from src.strategy.indicators import calculate_indicators, add_atr_baseline
 from src.strategy.regime_classifier import classify_regimes
 from src.strategy.htf_bias import add_htf_bias
 from src.strategy.orb_signal import compute_orb_signals, summarize_orb_signals
+from src.utils.vix_filter import VIXFilter
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
+
+# ── Priority 1: Hard loss cap + partial stop ──────────────────────────────────
+# Same logic as run_fhb_backtest.py -- see that file for full rationale.
+ORB_MAX_LOSS_USD     = 2_000   # Hard cap: max dollar risk per ORB trade
+ORB_HALF_STOP_R      = 0.50    # Partial stop: 50% exits at -0.5R for stop_full trades
+ORB_MIN_TIME_EXIT_R  = 0.20    # Time-exit minimum: if profit < 0.2R and no partial taken,
+                                # exit at breakeven instead (trims tiny wins that add noise)
+
+# ── P3: NQ ORB VIX filter ─────────────────────────────────────────────────────
+# NQ ORB PF=1.44 vs ES ORB PF=2.00 (60-day backtest). NQ has more false
+# breakouts in volatile/quiet regimes. Skip NQ ORB on HIGH_VOL and QUIET days.
+NQ_ORB_VIX_SKIP = {"HIGH_VOL", "QUIET"}
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -151,6 +164,12 @@ def simulate_orb_trades(
         if risk_pts <= 0:
             continue
 
+        # Priority 1A: Hard dollar loss cap
+        max_risk_pts = ORB_MAX_LOSS_USD / point_value
+        if risk_pts > max_risk_pts:
+            risk_pts = max_risk_pts
+            stop     = (entry - risk_pts) if is_long else (entry + risk_pts)
+
         target1 = entry + partial_r * risk_pts * (1 if is_long else -1)
         target2 = entry + full_r    * risk_pts * (1 if is_long else -1)
 
@@ -185,10 +204,10 @@ def simulate_orb_trades(
                     exit_bar_offset = j
                     break
 
-                # Check partial target
+                # Check partial target — trail stop to breakeven after firing
                 if not partial_taken and bar_high >= target1:
                     partial_taken = True
-                    # 50% off at target1, continue for rest
+                    stop = entry   # free trade: second half can only win or break even
 
                 # Check full target
                 if partial_taken and bar_high >= target2:
@@ -210,6 +229,7 @@ def simulate_orb_trades(
 
                 if not partial_taken and bar_low <= target1:
                     partial_taken = True
+                    stop = entry   # free trade: trail to breakeven
 
                 if partial_taken and bar_low <= target2:
                     final_exit_price = target2
@@ -225,21 +245,36 @@ def simulate_orb_trades(
             else:
                 final_exit_price = float(bars.iloc[-1]["Close"])
             exit_reason = "time"
+            # Minimum R filter: tiny profitable time exits add noise without real P&L.
+            # If gain < ORB_MIN_TIME_EXIT_R and no partial was already taken, exit at BE.
+            if not partial_taken and risk_pts > 0:
+                pnl_pts_check = (final_exit_price - entry) * (1 if is_long else -1)
+                r_check = pnl_pts_check / risk_pts
+                if 0 < r_check < ORB_MIN_TIME_EXIT_R:
+                    final_exit_price = entry
+                    exit_reason      = "time_be"
 
         # ── Calculate P&L ────────────────────────────────────────────────────
-        # For partial exit (50% at partial_r, 50% at final):
         if partial_taken and exit_reason == "target_full":
-            # Both partials hit their targets
+            # 50% at 1R partial target, 50% at 2R full target
             pnl_pts_1 = (target1 - entry) * (1 if is_long else -1) * partial_pct
             pnl_pts_2 = (target2 - entry) * (1 if is_long else -1) * (1.0 - partial_pct)
             pnl_pts   = pnl_pts_1 + pnl_pts_2
         elif partial_taken and "stop" in exit_reason:
-            # Partial taken at 1R, then stopped on remainder
+            # 50% at 1R, remaining 50% stopped (at breakeven after trail)
             pnl_pts_1 = (target1 - entry) * (1 if is_long else -1) * partial_pct
             pnl_pts_2 = (final_exit_price - entry) * (1 if is_long else -1) * (1.0 - partial_pct)
             pnl_pts   = pnl_pts_1 + pnl_pts_2
+        elif exit_reason == "stop_full":
+            # Priority 1B: 50% exits at -0.5R, 50% at full stop → avg -0.75R loss
+            sign    = 1 if is_long else -1
+            half_px = entry - ORB_HALF_STOP_R * risk_pts * sign
+            pnl_pts = (
+                (half_px - entry) * sign * 0.5
+                + (final_exit_price - entry) * sign * 0.5
+            )
         else:
-            # Full position exit (stop, time, or eod before partial)
+            # Time / eod exit -- full position at final price
             pnl_pts = (final_exit_price - entry) * (1 if is_long else -1)
 
         pnl_gross = pnl_pts * point_value
@@ -398,6 +433,10 @@ def main():
     config = load_config()
     orb_markets = config.get("intraday", {}).get("markets", ["ES", "NQ"])
 
+    # ── Step 0: Load VIX filter (P3: NQ ORB regime gate) ─────────────────────
+    print("Loading VIX filter...")
+    vix_filter = VIXFilter.from_yahoo(start="2023-01-01", end="2026-12-31")
+
     # ── Step 1: Download intraday data ────────────────────────────────────────
     intraday_data = download_all_intraday(
         markets=orb_markets,
@@ -450,6 +489,19 @@ def main():
     metrics_list = []
 
     for market, df_signals in orb_results.items():
+        # P3: NQ ORB -- blank out signals on HIGH_VOL / QUIET VIX days
+        if market == "NQ":
+            skipped = 0
+            for day_date in df_signals.index.normalize().unique():
+                vix_regime = vix_filter.get_regime(day_date)
+                if vix_regime in NQ_ORB_VIX_SKIP:
+                    mask = df_signals.index.normalize() == day_date
+                    df_signals.loc[mask, "orb_long_signal"]  = False
+                    df_signals.loc[mask, "orb_short_signal"] = False
+                    skipped += 1
+            if skipped:
+                print(f"  NQ ORB: {skipped} HIGH_VOL/QUIET days filtered by VIX")
+
         trades = simulate_orb_trades(df_signals, market, config)
         all_trades.extend(trades)
         metrics = compute_metrics(trades, market)

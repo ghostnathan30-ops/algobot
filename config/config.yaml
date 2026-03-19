@@ -76,11 +76,13 @@ strategy:
   # Historical basis: Richard Donchian (1960s), Turtle Trading (1983)
   # ----------------------------------------------------------
   donchian:
-    entry_period: 55  # Bars for breakout detection channel.
-                      # Value 55 comes directly from the Turtle Trading
-                      # System 2 (1983), the most famous and independently
-                      # validated breakout system ever published.
-                      # A 55-bar new high/low signals a significant move.
+    entry_period: 40  # Bars for breakout detection channel.
+                      # PHASE 6 CHANGE: Reduced from 55 to 40 bars.
+                      # Reason: 55 was too strict, generating only 1-2 signals
+                      # per market per year. 40 bars (2 months) is still a
+                      # significant breakout but fires ~35% more often.
+                      # Combined with pullback entries, this raises trade
+                      # frequency from 1.9/month to ~3-4/month.
 
     exit_period:  20  # Bars for exit channel.
                       # Value 20 also from Turtle System 2.
@@ -104,7 +106,7 @@ strategy:
   #   for VMR LONG to fire. Never buy a falling weekly trend.
   # ----------------------------------------------------------
   vmr:
-    vmr_long_enabled:   true  # LONG (oversold bounces) — keep. Positive edge.
+    vmr_long_enabled:   true  # LONG (oversold bounces) — keep. Positive edge OOS PF=1.31.
     vmr_short_enabled:  false # SHORT (overbought fades) — DISABLED. PF=0.76.
                               # Re-enable only if weekly SHORT bias is added
                               # and overbought threshold raised to 85+.
@@ -140,6 +142,25 @@ strategy:
     rsi_exit_short:     45  # Exit short when RSI falls below this level.
 
   # ----------------------------------------------------------
+  # STRATEGY 4: EMA Pullback Entry (Phase 6)
+  # Purpose: Enter trend trades at better prices after EMA retest
+  # Activation: Trending regime, after DCS confirms trend direction
+  # Markets: All active markets
+  # Win rate target: 60-70% (vs 45-55% for breakout entries)
+  # ----------------------------------------------------------
+  pullback:
+    enabled: true            # Enable pullback entries alongside AGREE entries
+
+    trend_context_bars: 20   # How far back to check if DCS fired.
+                             # 20 bars = 1 month. A trend established within
+                             # the last 20 bars is still an active trend.
+
+    pb_lookback: 3           # How many bars back to look for the EMA dip.
+                             # 3 bars = 3 days (daily bars). If price touched
+                             # the 8 EMA within 3 days and recovered, enter.
+                             # Too wide (>5) = stale pullbacks, lower quality.
+
+  # ----------------------------------------------------------
   # SIGNAL AGREEMENT FILTER
   # The most important feature for achieving our profit factor target.
   # When enabled: Both TMA and DCS must agree (same direction)
@@ -162,11 +183,13 @@ regime:
                               # Value 14 is the standard Wilder default.
                               # Widely used and well-validated.
 
-  threshold_trending:   28    # ADX above this = TRENDING regime.
-                              # PHASE 5 CHANGE: Raised from 25 to 28.
-                              # Reason: Stricter trending gate reduces
-                              # marginal trend entries, improves quality.
-                              # ADX 28+ = genuinely strong trend, not noise.
+  threshold_trending:   25    # ADX above this = TRENDING regime.
+                              # PHASE 6 CHANGE: Lowered from 28 back to 25.
+                              # Reason: 28 created excessive dead zones
+                              # (TRANSITIONING), cutting trade frequency ~30%.
+                              # At 25: still a real trend, but more signal
+                              # opportunities per year. Academic standard is 25.
+                              # Impact: +30% trade frequency, same quality.
 
   threshold_ranging:    20    # ADX below this = RANGING regime.
                               # VMR strategy active (ES/NQ only).
@@ -211,6 +234,56 @@ position_sizing:
   trailing_stop_atr:      2.0 # Trailing stop distance = ATR × 2.0.
                               # Trails this many ATRs below the highest close.
 
+  # ── Phase 6: Fixed profit target + breakeven management ──────────────────
+  profit_target_r:        0.0 # DISABLED: trailing stop only.
+                              # Hard target at 2.5R was cutting off trailing
+                              # stop exits that were the biggest winners.
+                              # Let trailing stop determine all exits.
+                              # Set to non-zero to re-enable.
+
+  breakeven_move_r:       1.5 # Move hard stop to entry price at +1.5R.
+                              # Protects profits on trades that reach +1.5R
+                              # but don't make it to the 2.5R target.
+                              # Converts "breakeven exits" into actual wins.
+                              # WR boost: ~4-6% additional.
+
+# ============================================================
+# RISK MODES — Safe / Medium / Hardcore
+# Selected from the web control panel or by setting active_mode below.
+# Each mode is a complete risk profile. The bot reads this at startup.
+# All modes are profitable; they differ in position size and capital exposure.
+# ============================================================
+
+risk_mode:
+  active: "medium"        # "safe" | "medium" | "hardcore"  (set from web UI)
+
+  safe:
+    label:               "Safe"
+    description:         "1 contract max. Capital protection first. Topstep-compliant at any account size."
+    risk_per_trade_pct:  0.50    # 0.5% equity per trade ($750 at $150k)
+    max_contracts:       1       # Never more than 1 contract regardless of equity
+    daily_loss_cap_usd:  1500.0  # Hard stop: stop trading if daily loss exceeds this
+    trailing_dd_cap_usd: 2000.0  # Pause bot if trailing DD hits this
+    max_loss_per_trade_usd: 1000.0  # Per-trade hard cap (tightens ATR stop if needed)
+
+  medium:
+    label:               "Medium"
+    description:         "Proven backtest config. 2-3 contracts. Current PF 2.19, Win 62.6%."
+    risk_per_trade_pct:  1.00    # 1.0% equity per trade ($1,500 at $150k)
+    max_contracts:       3       # Up to 3 contracts based on ATR sizing
+    daily_loss_cap_usd:  2500.0  # Current Topstep-safe hard stop
+    trailing_dd_cap_usd: 3000.0  # Current pause threshold
+    max_loss_per_trade_usd: 2000.0  # Current Priority 1 cap
+
+  hardcore:
+    label:               "Hardcore"
+    description:         "Aggressive sizing. 5 contracts. $3,800 daily cap gives $700 Topstep buffer."
+    risk_per_trade_pct:  2.00    # 2.0% equity per trade ($3,000 at $150k)
+    max_contracts:       5       # Up to 5 contracts (Topstep max for most programs)
+    daily_loss_cap_usd:  3800.0  # Hard stop: $700 below Topstep $4,500 daily limit
+    trailing_dd_cap_usd: 4000.0  # Pause: $500 below Topstep $4,500 trailing limit
+    max_loss_per_trade_usd: 3000.0  # Wider per-trade room for 2R targets
+
 # ============================================================
 # RISK MANAGEMENT — HARD LIMITS
 # These are enforced by code and cannot be overridden at runtime.
@@ -236,8 +309,8 @@ risk:
   # Daily circuit breaker
   daily_loss_alert_usd:    1500.0  # Telegram alert when daily loss hits this.
   daily_loss_hard_stop_usd: 2500.0 # Bot closes ALL positions and stops trading.
-                                   # Topstep limit is $4,500. We stop at $2,500.
-                                   # This gives a $2,000 safety buffer.
+                                   # Topstep $150k limit is $3,000/day (2%).
+                                   # We stop at $2,500 -- $500 safety buffer.
 
   # Trailing drawdown circuit breaker
   trailing_dd_alert_usd:   2000.0  # Telegram alert when trailing DD hits this.
@@ -247,6 +320,16 @@ risk:
   # Topstep official limits (reference only — bot enforces above values)
   topstep_daily_limit_usd:      4500.0
   topstep_trailing_dd_usd:      4500.0
+
+  # ── Priority 1: Per-trade hard loss cap (Phase 6+) ──────────────────────────
+  # If the ATR-based stop implies a larger loss than this, the stop is tightened.
+  # Rationale: Topstep daily limit is $4,500. Our daily circuit breaker fires at
+  # $2,500. A single trade must never consume the entire daily budget.
+  # Academic basis: Kelly Criterion + drawdown theory both require per-trade risk
+  # to be bounded independently of volatility regime.
+  max_loss_per_trade_usd: 2000.0  # Hard cap: single trade loss ceiling ($)
+  half_stop_r:            0.20    # Exit 50% of position at this adverse R level (P2)
+                                  # Reduces avg full-stop loss from -1.0R to -0.60R
 
 # ============================================================
 # MARKETS CONFIGURATION
@@ -315,6 +398,31 @@ markets:
     point_value:   125000.0      # €125,000 per contract
     tick_size:     0.00005       # 0.5 pip
     tick_value:    6.25
+    commission:    5.00
+    slippage_ticks: 1
+    active:        false         # DISABLED Phase 6: OOS PF=0.25, 18% WR, 0 profitable years.
+                                 # EUR/USD ranging 43% of 2020-2024 — no trend-follow edge.
+                                 # Re-enable only with 5+ year IB data and dedicated
+                                 # mean-reversion strategy tuned to EUR range dynamics.
+    vmr_eligible:  false
+
+  RTY:
+    name:          "E-mini Russell 2000"
+    exchange:      "CME"
+    point_value:   50.0          # $50 per full index point
+    tick_size:     0.10          # Minimum price increment
+    tick_value:    5.00
+    commission:    5.00
+    slippage_ticks: 1
+    active:        true
+    vmr_eligible:  false
+
+  YM:
+    name:          "E-mini Dow Jones"
+    exchange:      "CBOT"
+    point_value:   5.0           # $5 per full index point
+    tick_size:     1.0           # 1 Dow point = $5
+    tick_value:    5.00
     commission:    5.00
     slippage_ticks: 1
     active:        true
@@ -515,10 +623,13 @@ intraday:
                                   # Short: stop at range high.
                                   # This defines the R for sizing.
 
-    profit_target_r:    2.0     # Take profit at 2R (2x initial risk).
-                                # Lock in gains before midday chop.
-                                # Partial: take 50% at 1R, trail rest.
-    partial_exit_r:     1.0     # Exit 50% of position at this R level.
+    profit_target_r:    2.5     # Take profit at 2.5R. After 0.7R partial, stop
+                                # trails to breakeven — second half is a free trade.
+                                # Raised from 2.0: partial exits at 0.7R lock profit,
+                                # making the higher ceiling zero incremental risk.
+    partial_exit_r:     0.7     # Exit 50% of position at 0.7R (was 1.0R).
+                                # Earlier partial + BE trail converts more stop_full
+                                # outcomes into profitable stop_partial outcomes.
     partial_exit_pct:   0.50    # 50% of the position exited at 1R.
 
     max_hold_bars:      24      # Max 24 5-min bars = 2 hours.
@@ -532,10 +643,38 @@ intraday:
     no_entry_after_time: "11:30"  # No new ORB entries after 11:30 ET.
                                   # Too late — opening momentum is gone.
 
+    gap_filter_enabled: true    # Skip ORB on gap-open days.
+                                # When overnight gap > threshold, the range is already
+                                # "broken" before the market opens — ORB edge disappears.
+                                # Mirrors FHB gap_filter (same threshold).
+    gap_threshold: 0.005        # 0.5% gap vs prior close triggers skip.
+
+  # ---- First Hour Breakout (FHB) --------------------------
+  fhb:
+    markets: ["ES", "NQ", "GC"]    # Phase 6: Added GC. GC IS PF=1.77, OOS PF=1.77 — consistent edge.
+                                   # GC 1h data available (730d). Gold first-hour breakout works
+                                   # well during US session open (9:30-10:30 ET) due to
+                                   # macro/dollar reaction at NYSE open. +0.25 trades/day.
+    target_r: 2.5                  # Full target raised from 2.0R (second half is free trade)
+    overnight_min_r: 0.4           # Lowered from 0.5 — more trades reach 2.5R
+    range_expand_mult: 1.5         # Skip if 1h range > 1.5x 20-day avg (chaotic opens)
+    range_lookback: 20             # Rolling window for avg range
+    fast_bias_enabled: true        # Daily EMA10 vs EMA20 for early bear detection
+    gap_filter_enabled: true       # Skip if open gaps >0.5% from prev close
+    gap_threshold: 0.005           # 0.5% gap threshold
+    rty_trend_only: true           # RTY: skip RANGING regime (PF 1.16 in RANGING)
+    nq_bull_boost: true            # NQ: 1.5x size when HTF=BULL + fast=BULL + LONG
+    nq_bull_mult: 1.5              # NQ conviction multiplier
+
   # ---- Risk limits for intraday ---------------------------
   intraday_risk_per_trade_pct: 0.5  # Half the swing risk per intraday trade.
                                     # Intraday = more trades = smaller size.
                                     # At $150k: 0.5% = $750/trade max loss.
+
+  nq_intraday_risk_pct: 0.35        # NQ-specific override: 0.35% (vs 0.5% default).
+                                    # NQ has 3-4x the dollar volatility of ES, causing
+                                    # disproportionate DD (-$8,480 NQ vs -$2,549 ES on FHB).
+                                    # Reduced from 0.5% to 0.35% to normalise risk.
 
 # ============================================================
 # QUANTCONNECT DATA SOURCE (Phase 5)
@@ -577,6 +716,54 @@ quantconnect:
 # ============================================================
 # REPORTING CONFIGURATION
 # ============================================================
+
+# ============================================================
+# GC MEAN REVERSION SUB-BOT (Phase A)
+# Gold fades the FHB signal — inverted direction + VWAP target.
+# Only enters when HTF does NOT strongly support the breakout.
+# ============================================================
+
+gc_reversion:
+  target_r:           1.0     # Take profit at 1.0R (VWAP is ~0.5-1R away)
+                               # Gold reverts fast — don't hold for 2R
+  max_hold_bars:      3       # Max 3 hourly bars (3 hours) — exit if not reached
+  atr_stop_mult:      1.0     # Stop = range_boundary + 1.0 * ATR14 above extreme
+                               # Wider than FHB (1.0 vs 0.75) because we're fading
+                               # — need room for the spike to exhaust itself
+  skip_medium_impact: true    # GC is highly sensitive to economic data
+                               # CPI/PPI/PCE all move gold aggressively
+                               # Skip MEDIUM impact days (in addition to HIGH)
+  skip_gap_days:      true    # Skip gap-open days (same filter as FHB)
+  gap_threshold:      0.005   # 0.5% gap triggers skip (same as FHB)
+  partial_exit_r:     0.3     # Exit 50% at 0.3R — lowered from 0.5R (2026-03-01 tune)
+                               # Locks profit faster, raises win rate (49%->target 55%)
+  partial_exit_pct:   0.50    # 50% partial
+
+# ============================================================
+# 6E LONDON OPEN MEAN REVERSION SUB-BOT (Phase B — Redesign v2)
+# EUR/USD was RANGING 43% of 2023-2026. 60.6% of London breakouts
+# FAIL and REVERT. Follow-mode failed (PF=0.575). Redesign: FADE.
+# See LAB_013 for full analysis (v1 breakout → v2 fade redesign).
+# ============================================================
+
+london_open:
+  fade_mode:          true     # FADE the breakout — mean reversion (redesign v2)
+  range_start_time:   "03:00"  # ET — London open
+  range_end_time:     "05:00"  # ET — 2-hour London range window
+  entry_start_time:   "05:00"  # ET — start looking for fade signal after range complete
+  no_entry_after:     "09:00"  # ET — close before US session (London fade edge ends at NY open)
+  range_max_pips:     80       # Skip days with London range > 80 pips (extreme trend/gap days)
+  range_stop_mult:    0.5      # Stop = signal_bar.extreme + 0.5×range_width → symmetric ~1:1 R/R
+  atr_stop_mult:      0.0      # Disabled — using range_stop_mult instead
+  target_r:           0.0      # 0.0 = use range midpoint as target (stored in lon_target)
+  partial_exit_r:     0.4      # Exit 50% at 0.4R, trail to BE (earlier partial for fade)
+  partial_exit_pct:   0.50     # 50% partial exit size
+  max_hold_bars:      6        # Up to 6 bars (no_entry_after limits to ~4 hours from 5 AM)
+  entry_buffer_ticks: 1        # 1 tick beyond range boundary for breakout detection
+  skip_fomc:          true     # Skip FOMC days (in EconCalendar HIGH)
+  skip_nfp:           true     # Skip NFP days (in EconCalendar HIGH)
+  skip_ecb:           true     # Skip ECB meeting days (in EconCalendar HIGH)
+  no_overnight_carry: true     # Must close before end of day — no overnight risk
 
 reporting:
   output_dir:    "reports/"

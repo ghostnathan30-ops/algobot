@@ -1,0 +1,137 @@
+{
+  "run_timestamp": "2026-03-06_12-34-14",
+  "phase": "6",
+  "config_changes": [
+    "adx_threshold_25",
+    "donchian_40bar",
+    "pullback_entries",
+    "profit_target_2.5R",
+    "breakeven_1.5R",
+    "6e_disabled"
+  ],
+  "is_2004_2019": {
+    "total_return_pct": 15.95,
+    "annualized_return_pct": 0.93,
+    "profit_factor": 1.0933,
+    "sharpe_ratio": -0.4492,
+    "sortino_ratio": -0.4847,
+    "calmar_ratio": 0.0505,
+    "max_drawdown_pct": -18.41,
+    "max_drawdown_duration_days": 2544,
+    "win_rate_pct": 50.38,
+    "avg_win_loss_ratio": 1.0769,
+    "avg_r_multiple": 0.0441,
+    "expectancy_per_trade_usd": 60.18,
+    "total_trades": 397,
+    "trend_trades": 320,
+    "vmr_trades": 77,
+    "trades_per_month": 2.1,
+    "profitable_years": 9,
+    "total_years": 16,
+    "annual_returns_by_year": {
+      "2004": 4.76,
+      "2005": -4.35,
+      "2006": 3.23,
+      "2007": 0.52,
+      "2008": -1.87,
+      "2009": 2.14,
+      "2010": -2.27,
+      "2011": -3.26,
+      "2012": -0.94,
+      "2013": -0.2,
+      "2014": -2.5,
+      "2015": 0.5,
+      "2016": 3.32,
+      "2017": 6.84,
+      "2018": 6.09,
+      "2019": 2.68
+    },
+    "profit_factor_by_market": {
+      "CL": 0.9035,
+      "ES": 1.1044,
+      "GC": 1.444,
+      "NQ": 1.0899,
+      "ZB": 0.9941
+    },
+    "profit_factor_by_strategy": {
+      "TREND": 1.112,
+      "VMR": 0.9998
+    },
+    "exit_reason_breakdown": {
+      "trailing_stop": 149,
+      "stop_loss": 145,
+      "vmr_exit": 43,
+      "dcs_exit": 42,
+      "vmr_timeout": 10,
+      "daily_hard_stop": 5,
+      "end_of_data": 3
+    },
+    "initial_capital": 150000.0,
+    "final_equity": 173920.3503983353,
+    "n_trades": 397,
+    "period": "2004-01-01 to 2019-12-31"
+  },
+  "oos_2020_2024": {
+    "total_return_pct": 28.58,
+    "annualized_return_pct": 5.18,
+    "profit_factor": 1.6119,
+    "sharpe_ratio": 0.2063,
+    "sortino_ratio": 0.2215,
+    "calmar_ratio": 0.6286,
+    "max_drawdown_pct": -8.24,
+    "max_drawdown_duration_days": 517,
+    "win_rate_pct": 57.14,
+    "avg_win_loss_ratio": 1.2089,
+    "avg_r_multiple": 0.2306,
+    "expectancy_per_trade_usd": 340.18,
+    "total_trades": 126,
+    "trend_trades": 103,
+    "vmr_trades": 23,
+    "trades_per_month": 2.1,
+    "profitable_years": 4,
+    "total_years": 5,
+    "annual_returns_by_year": {
+      "2020": 18.92,
+      "2021": 5.51,
+      "2022": -3.45,
+      "2023": 3.3,
+      "2024": 3.77
+    },
+    "profit_factor_by_market": {
+      "CL": 2.1869,
+      "ES": 1.2991,
+      "GC": 1.4426,
+      "NQ": 1.8449,
+      "ZB": 1.6013
+    },
+    "profit_factor_by_strategy": {
+      "TREND": 1.6729,
+      "VMR": 1.3132
+    },
+    "exit_reason_breakdown": {
+      "trailing_stop": 53,
+      "stop_loss": 36,
+      "dcs_exit": 15,
+      "vmr_exit": 15,
+      "daily_hard_stop": 5,
+      "vmr_timeout": 1,
+      "end_of_data": 1
+    },
+    "initial_capital": 150000.0,
+    "final_equity": 192872.74758254175,
+    "n_trades": 126,
+    "period": "2020-01-01 to 2024-12-31"
+  },
+  "phase5_baseline_is": {
+    "profit_factor": 1.137,
+    "win_rate_pct": 51.3,
+    "max_drawdown_pct": -20.26
+  },
+  "phase5_baseline_oos": {
+    "profit_factor": 1.285,
+    "win_rate_pct": 54.0,
+    "max_drawdown_pct": -8.48
+  },
+  "n_checks_passed": 4,
+  "verdict": "NEEDS_IMPROVEMENT"
+}

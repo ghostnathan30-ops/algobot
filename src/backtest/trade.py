@@ -16,6 +16,7 @@ Fields are grouped into four sections:
 Exit reasons:
   "stop_loss"       — Initial stop price hit (bar Low < stop for longs)
   "trailing_stop"   — Trailing stop price hit (after activation at +1R)
+  "profit_target"   — Profit target price hit (Phase 6+, e.g. 2.5R)
   "dcs_exit"        — DCS 20-bar channel exit fired
   "tma_flip"        — TMA signal flipped to opposite direction
   "vmr_exit"        — VMR RSI returned to neutral zone
@@ -67,6 +68,13 @@ class OpenPosition:
     lowest_close:       float = 0.0   # For trailing stop (short positions)
     trailing_active:    bool  = False
     trailing_stop_price: Optional[float] = None
+
+    # Profit target and breakeven management (Phase 6+)
+    # stop_dist is stored so the engine can compute target prices from entry
+    stop_dist:              float = 0.0    # Initial stop distance in price points
+    profit_target_r:        float = 2.5    # Close 100% at this R (0 = disabled)
+    breakeven_move_r:       float = 1.5    # Move stop to entry_price_adj at this R
+    breakeven_activated:    bool  = False  # True once stop has been moved to BE
 
     # Max adverse / favorable excursion tracking
     max_adverse_excursion:   float = 0.0  # Worst unrealised loss (in price points)

@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlgoBot — Bot Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ================================================================
+   DESIGN SYSTEM (matches index.html)
+================================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #020408;
+  --bg2:       #080d14;
+  --bg3:       #0f1520;
+  --card:      rgba(8,13,20,0.92);
+  --border:    rgba(255,255,255,0.055);
+  --border-md: rgba(255,255,255,0.09);
+  --brand:     #00d4aa;
+  --brand-dim: rgba(0,212,170,0.1);
+  --brand-glow:0 0 30px rgba(0,212,170,0.15);
+  --profit:    #00c878;
+  --profit-bg: rgba(0,200,120,0.08);
+  --loss:      #ff3b5c;
+  --loss-bg:   rgba(255,59,92,0.08);
+  --amber:     #f59e0b;
+  --amber-bg:  rgba(245,158,11,0.08);
+  --blue:      #3b82f6;
+  --purple:    #a78bfa;
+  --text-1:    #f1f5f9;
+  --text-2:    #94a3b8;
+  --text-3:    #475569;
+  --mono:      'JetBrains Mono', monospace;
+  --font:      'Inter', system-ui, sans-serif;
+  --r:         14px;
+  --r-sm:      8px;
+  --shadow:    0 4px 24px rgba(0,0,0,0.5);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,0.6);
+}
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 90% 50% at 15% 5%,  rgba(0,212,170,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 85% 95%, rgba(59,130,246,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(167,139,250,0.02) 0%, transparent 70%);
+}
+
+/* ── Layout ─────────────────────────────────────────────────── */
+.wrap {
+  position: relative; z-index: 1;
+  max-width: 1100px; margin: 0 auto;
+  padding: 0 20px 60px;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 0 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+  flex-wrap: wrap; gap: 12px;
+}
+.logo { display: flex; align-items: center; gap: 14px; }
+.logo-mark {
+  width: 40px; height: 40px;
+  background: linear-gradient(135deg, var(--brand) 0%, #00a88a 100%);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 18px; color: #000;
+  box-shadow: var(--brand-glow);
+}
+.logo-text h1 { font-size: 18px; font-weight: 700; color: var(--text-1); }
+.logo-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  background: var(--brand-dim); color: var(--brand);
+  border: 1px solid rgba(0,212,170,0.25);
+  padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 6px;
+}
+.logo-text p { font-size: 11px; color: var(--text-3); }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--r-sm);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  border: 1px solid var(--border-md); background: var(--bg3);
+  color: var(--text-2); cursor: pointer; transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg2); color: var(--text-1); border-color: rgba(255,255,255,0.15); }
+.btn-brand {
+  background: var(--brand); color: #000; border-color: var(--brand);
+  font-weight: 700;
+}
+.btn-brand:hover { background: #00b894; border-color: #00b894; color: #000; }
+.btn-danger { background: var(--loss-bg); color: var(--loss); border-color: rgba(255,59,92,0.25); }
+.btn-danger:hover { background: rgba(255,59,92,0.18); }
+.btn-nav { background: var(--brand-dim); color: var(--brand); border-color: rgba(0,212,170,0.25); }
+.btn-nav:hover { background: rgba(0,212,170,0.18); }
+.btn-logout { color: var(--text-3); }
+.btn-logout:hover { color: var(--loss); border-color: rgba(255,59,92,0.3); background: var(--loss-bg); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Cards ─────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 24px;
+  backdrop-filter: blur(12px);
+}
+.card-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-3);
+  margin-bottom: 20px;
+}
+.section { margin-bottom: 28px; }
+.section-title {
+  font-size: 13px; font-weight: 600; color: var(--text-2);
+  margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+}
+.section-title .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--brand);
+}
+
+/* ── Status bar ─────────────────────────────────────────────── */
+.status-bar {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px; margin-bottom: 28px;
+}
+.stat-box {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 16px;
+}
+.stat-box .label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.stat-box .value { font-size: 20px; font-weight: 700; font-family: var(--mono); color: var(--text-1); }
+.stat-box .value.green { color: var(--profit); }
+.stat-box .value.red   { color: var(--loss); }
+.stat-box .value.amber { color: var(--amber); }
+
+/* ── Bot running indicator ──────────────────────────────────── */
+.running-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; border: 1px solid;
+}
+.running-pill.on  { background: var(--profit-bg); color: var(--profit); border-color: rgba(0,200,120,0.3); }
+.running-pill.off { background: var(--bg3);        color: var(--text-3);  border-color: var(--border); }
+.pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+}
+.running-pill.on  .pulse { background: var(--profit); animation: pulse 1.4s infinite; }
+.running-pill.off .pulse { background: var(--text-3); }
+@keyframes pulse {
+  0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,200,120,0.4); }
+  50%      { opacity: 0.8; box-shadow: 0 0 0 5px rgba(0,200,120,0); }
+}
+
+/* ── Risk mode cards ────────────────────────────────────────── */
+.mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 680px) { .mode-grid { grid-template-columns: 1fr; } }
+
+.mode-card {
+  background: var(--bg3);
+  border: 2px solid var(--border);
+  border-radius: var(--r);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative; overflow: hidden;
+}
+.mode-card:hover { border-color: var(--border-md); transform: translateY(-1px); }
+.mode-card.active-safe     { border-color: var(--profit); box-shadow: 0 0 20px rgba(0,200,120,0.12); }
+.mode-card.active-medium   { border-color: var(--amber);  box-shadow: 0 0 20px rgba(245,158,11,0.12); }
+.mode-card.active-hardcore { border-color: var(--loss);   box-shadow: 0 0 20px rgba(255,59,92,0.12); }
+
+.mode-card .mode-icon {
+  font-size: 28px; margin-bottom: 10px; display: block;
+}
+.mode-card .mode-name {
+  font-size: 15px; font-weight: 700; margin-bottom: 4px;
+}
+.mode-card.safe-card      .mode-name { color: var(--profit); }
+.mode-card.medium-card    .mode-name { color: var(--amber); }
+.mode-card.hardcore-card  .mode-name { color: var(--loss); }
+.mode-card .mode-desc {
+  font-size: 11px; color: var(--text-3); margin-bottom: 14px; line-height: 1.6;
+}
+.mode-stat {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 0; border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+.mode-stat .k { color: var(--text-3); }
+.mode-stat .v { font-family: var(--mono); font-weight: 600; color: var(--text-2); }
+.safe-card .mode-stat .v     { color: var(--profit); }
+.medium-card .mode-stat .v   { color: var(--amber); }
+.hardcore-card .mode-stat .v { color: var(--loss); }
+
+.active-badge {
+  position: absolute; top: 10px; right: 10px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 2px 7px; border-radius: 4px;
+}
+.safe-badge     { background: var(--profit-bg); color: var(--profit); border: 1px solid rgba(0,200,120,0.3); }
+.medium-badge   { background: var(--amber-bg);  color: var(--amber);  border: 1px solid rgba(245,158,11,0.3); }
+.hardcore-badge { background: var(--loss-bg);   color: var(--loss);   border: 1px solid rgba(255,59,92,0.3); }
+
+/* ── Account config ─────────────────────────────────────────── */
+.account-row {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+.account-balance-display {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px 16px;
+  font-family: var(--mono); font-size: 22px; font-weight: 700;
+  color: var(--brand); min-width: 180px; text-align: center;
+}
+.ibkr-tag {
+  font-size: 9px; color: var(--text-3); display: block; margin-top: 2px;
+  font-family: var(--font); text-align: center;
+}
+.input-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.input-field {
+  background: var(--bg3); border: 1px solid var(--border-md);
+  border-radius: var(--r-sm); padding: 9px 14px;
+  color: var(--text-1); font-family: var(--mono); font-size: 14px;
+  width: 160px; transition: border-color 0.15s;
+}
+.input-field:focus { outline: none; border-color: var(--brand); }
+.input-field::placeholder { color: var(--text-3); }
+
+/* ── Position calculator ────────────────────────────────────── */
+.calc-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  margin-top: 16px;
+}
+@media (max-width: 680px) { .calc-grid { grid-template-columns: 1fr; } }
+
+.calc-card {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 14px; text-align: center;
+}
+.calc-card .c-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.calc-card .c-contracts { font-size: 32px; font-weight: 800; font-family: var(--mono); }
+.calc-card .c-sub { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+.calc-card.safe-calc      .c-contracts { color: var(--profit); }
+.calc-card.medium-calc    .c-contracts { color: var(--amber); }
+.calc-card.hardcore-calc  .c-contracts { color: var(--loss); }
+.calc-inputs { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.calc-input-group label { font-size: 11px; color: var(--text-3); display: block; margin-bottom: 4px; }
+.calc-input-group input { width: 120px; }
+
+/* ── Bot control ────────────────────────────────────────────── */
+.control-row {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.btn-start {
+  background: var(--profit-bg); color: var(--profit);
+  border-color: rgba(0,200,120,0.3);
+  font-size: 14px; padding: 12px 28px; font-weight: 700;
+}
+.btn-start:hover { background: rgba(0,200,120,0.2); }
+.btn-stop {
+  background: var(--loss-bg); color: var(--loss);
+  border-color: rgba(255,59,92,0.3);
+  font-size: 14px; padding: 12px 28px; font-weight: 700;
+}
+.btn-stop:hover { background: rgba(255,59,92,0.2); }
+.btn-backtest-full {
+  background: var(--brand-dim); color: var(--brand);
+  border-color: rgba(0,212,170,0.3);
+  font-size: 13px; padding: 10px 22px; font-weight: 700;
+}
+.btn-backtest-full:hover { background: rgba(0,212,170,0.2); }
+
+/* ── Toast ──────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 28px; right: 28px; z-index: 999;
+  background: var(--bg3); border: 1px solid var(--border-md);
+  border-radius: var(--r-sm); padding: 12px 20px;
+  font-size: 13px; color: var(--text-1);
+  box-shadow: var(--shadow-lg);
+  opacity: 0; transform: translateY(10px);
+  transition: all 0.25s; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.ok   { border-color: rgba(0,200,120,0.4); color: var(--profit); }
+.toast.err  { border-color: rgba(255,59,92,0.4);  color: var(--loss); }
+
+/* ── Divider ────────────────────────────────────────────────── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
+/* ── Mini spinner ───────────────────────────────────────────── */
+.mini-spin {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border-md); border-top-color: var(--brand);
+  border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Improvement flags ──────────────────────────────────────── */
+.flags-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .flags-grid { grid-template-columns: 1fr; } }
+.flag-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 14px;
+}
+.flag-row input[type="checkbox"] { margin-top: 2px; accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+.flag-row .flag-label { font-size: 12px; font-weight: 600; color: var(--text-1); margin-bottom: 2px; }
+.flag-row .flag-desc  { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+
+/* ── Anim ───────────────────────────────────────────────────── */
+.anim { animation: fadeUp 0.35s both; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header class="header anim">
+    <div class="logo">
+      <div class="logo-mark">A</div>
+      <div class="logo-text">
+        <h1>AlgoBot <span class="logo-badge">CONTROL</span></h1>
+        <p>Bot Configuration &amp; Risk Management</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <a href="/" class="btn btn-nav">← Dashboard</a>
+      <form action="/auth/logout" method="post" style="margin:0">
+        <button class="btn btn-logout" type="submit">Sign Out</button>
+      </form>
+    </div>
+  </header>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar anim">
+    <div class="stat-box">
+      <div class="label">Bot Status</div>
+      <div id="stat-status" class="value">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">Risk Mode</div>
+      <div id="stat-mode" class="value amber">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">Account Balance</div>
+      <div id="stat-balance" class="value">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">Today's P&amp;L</div>
+      <div id="stat-pnl" class="value">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">Today's Trades</div>
+      <div id="stat-trades" class="value">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">Daily Loss Cap</div>
+      <div id="stat-cap" class="value red">—</div>
+    </div>
+  </div>
+
+  <!-- MAIN CARD -->
+  <div class="card anim">
+
+    <!-- ── SECTION 1: Risk Mode ── -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span> Risk Mode</div>
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
+        Choose how aggressively the bot sizes positions. All modes use the same profitable
+        strategy (PF 2.19 | Win 62.6%). The difference is <strong style="color:var(--text-2)">position size and daily risk caps</strong>.
+        Scaling up a profitable system amplifies both wins and losses proportionally.
+        Hardcore mode remains within Topstep's $4,500 daily limit with a $700 buffer.
+      </p>
+      <div class="mode-grid">
+
+        <!-- SAFE -->
+        <div class="mode-card safe-card" id="card-safe" onclick="selectMode('safe')">
+          <span class="mode-icon">🛡️</span>
+          <div class="mode-name">Safe</div>
+          <div class="mode-desc">Capital protection first. 1 contract max at any account size. Never risks more than 0.5% per trade.</div>
+          <div class="mode-stat"><span class="k">Risk/trade</span><span class="v">0.5% equity</span></div>
+          <div class="mode-stat"><span class="k">Max contracts</span><span class="v">1</span></div>
+          <div class="mode-stat"><span class="k">Daily cap</span><span class="v">$1,500</span></div>
+          <div class="mode-stat"><span class="k">Per-trade cap</span><span class="v">$1,000</span></div>
+          <div class="mode-stat"><span class="k">Trailing DD pause</span><span class="v">$2,000</span></div>
+        </div>
+
+        <!-- MEDIUM -->
+        <div class="mode-card medium-card" id="card-medium" onclick="selectMode('medium')">
+          <span class="mode-icon">⚖️</span>
+          <div class="mode-name">Medium</div>
+          <div class="mode-desc">Proven backtest configuration. Current PF 2.19 | 62.6% win | Max DD -$6.4k over 2 years.</div>
+          <div class="mode-stat"><span class="k">Risk/trade</span><span class="v">1.0% equity</span></div>
+          <div class="mode-stat"><span class="k">Max contracts</span><span class="v">3</span></div>
+          <div class="mode-stat"><span class="k">Daily cap</span><span class="v">$2,500</span></div>
+          <div class="mode-stat"><span class="k">Per-trade cap</span><span class="v">$2,000</span></div>
+          <div class="mode-stat"><span class="k">Trailing DD pause</span><span class="v">$3,000</span></div>
+        </div>
+
+        <!-- HARDCORE -->
+        <div class="mode-card hardcore-card" id="card-hardcore" onclick="selectMode('hardcore')">
+          <span class="mode-icon">⚡</span>
+          <div class="mode-name">Hardcore</div>
+          <div class="mode-desc">Maximum sizing. Up to 5 contracts. $3,800 daily cap leaves $700 Topstep safety buffer.</div>
+          <div class="mode-stat"><span class="k">Risk/trade</span><span class="v">2.0% equity</span></div>
+          <div class="mode-stat"><span class="k">Max contracts</span><span class="v">5</span></div>
+          <div class="mode-stat"><span class="k">Daily cap</span><span class="v">$3,800</span></div>
+          <div class="mode-stat"><span class="k">Per-trade cap</span><span class="v">$3,000</span></div>
+          <div class="mode-stat"><span class="k">Trailing DD pause</span><span class="v">$4,000</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── SECTION 2: Account ── -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span> Account Configuration</div>
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
+        The bot reads your live IBKR account balance to compute position sizes dynamically.
+        As your account grows, position sizes grow with it automatically.
+        You can override the balance manually (useful for Topstep evaluation accounts).
+      </p>
+
+      <div class="account-row" style="margin-bottom:20px;">
+        <div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">Live IBKR Balance</div>
+          <div class="account-balance-display" id="live-balance">
+            Connecting...
+            <span class="ibkr-tag" id="balance-tag">checking TWS port 7497</span>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">Manual Override</div>
+          <div class="input-group">
+            <input type="number" class="input-field" id="override-input"
+                   placeholder="e.g. 150000" min="1000" step="1000">
+            <button class="btn btn-brand" onclick="setOverride()">Set</button>
+            <button class="btn" onclick="clearOverride()">Use IBKR Live</button>
+          </div>
+          <div style="font-size:10px;color:var(--text-3);margin-top:5px;" id="override-status">
+            No override set — using live IBKR balance
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;">
+        Effective balance used for sizing: <span id="effective-balance" style="color:var(--brand);font-family:var(--mono);font-weight:600;">—</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── SECTION 3: Position Calculator ── -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span> Position Size Calculator</div>
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
+        Shows how many contracts the bot would trade for each mode given current market conditions.
+        ATR = Average True Range in index points (measures daily volatility; used to compute stop distance).
+      </p>
+
+      <div class="calc-inputs" style="margin-bottom:16px;">
+        <div class="calc-input-group">
+          <label>Market</label>
+          <select class="input-field" id="calc-market" onchange="runCalc()" style="width:90px;">
+            <option>ES</option>
+            <option>NQ</option>
+            <option>GC</option>
+            <option>CL</option>
+            <option>ZB</option>
+          </select>
+        </div>
+        <div class="calc-input-group">
+          <label>ATR (pts)</label>
+          <input type="number" class="input-field" id="calc-atr" value="20" min="1" step="1" onchange="runCalc()">
+        </div>
+        <div class="calc-input-group">
+          <label>Account ($)</label>
+          <input type="number" class="input-field" id="calc-account" value="150000" min="1000" step="5000" onchange="runCalc()">
+        </div>
+        <button class="btn btn-brand" onclick="runCalc()">Calculate</button>
+      </div>
+
+      <div class="calc-grid">
+        <div class="calc-card safe-calc">
+          <div class="c-label">Safe Mode</div>
+          <div class="c-contracts" id="calc-safe-cts">—</div>
+          <div class="c-sub" id="calc-safe-sub">contracts</div>
+          <div style="font-size:10px;color:var(--text-3);margin-top:8px;" id="calc-safe-risk">Max risk: —</div>
+        </div>
+        <div class="calc-card medium-calc">
+          <div class="c-label">Medium Mode</div>
+          <div class="c-contracts" id="calc-medium-cts">—</div>
+          <div class="c-sub" id="calc-medium-sub">contracts</div>
+          <div style="font-size:10px;color:var(--text-3);margin-top:8px;" id="calc-medium-risk">Max risk: —</div>
+        </div>
+        <div class="calc-card hardcore-calc">
+          <div class="c-label">Hardcore Mode</div>
+          <div class="c-contracts" id="calc-hardcore-cts">—</div>
+          <div class="c-sub" id="calc-hardcore-sub">contracts</div>
+          <div style="font-size:10px;color:var(--text-3);margin-top:8px;" id="calc-hardcore-risk">Max risk: —</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── SECTION 4: Bot Controls ── -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span> Bot Controls</div>
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
+        Start or stop the live paper trading engine. The bot will use the active Risk Mode
+        and account balance above. TWS must be running on port 7497.
+      </p>
+
+      <div class="control-row" style="margin-bottom:20px;">
+        <button class="btn btn-start" id="btn-start" onclick="botStart()">
+          ▶ Start Paper Trading
+        </button>
+        <button class="btn btn-stop" id="btn-stop" onclick="botStop()">
+          ■ Stop Bot
+        </button>
+        <div style="font-size:11px;color:var(--text-3);" id="bot-status-label">
+          Bot is stopped
+        </div>
+      </div>
+
+      <div class="control-row">
+        <button class="btn btn-backtest-full" id="btn-extensive" onclick="runExtensive()">
+          ↻ Run Full Backtest
+        </button>
+        <div style="font-size:11px;color:var(--text-3);" id="backtest-status-label">
+          Runs ORB + FHB on all available data (~2 min). Dashboard auto-updates.
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── SECTION 5: Bot Improvements ── -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span> Strategy Improvement Filters</div>
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
+        These filters are applied on top of the core strategy signals. They are already
+        partially implemented — this panel controls which are active.
+        <span style="color:var(--amber);">Note: These settings are informational until wired into the live engine in Phase 6B.</span>
+      </p>
+
+      <div class="flags-grid">
+        <div class="flag-row">
+          <input type="checkbox" id="flag-vix" onchange="setFlag('vix_filter', this.checked)">
+          <div>
+            <div class="flag-label">VIX Regime Filter</div>
+            <div class="flag-desc">Skip trades when VIX is in HIGH_VOL regime (NQ PF=0.49 in high vol). Validated in backtest.</div>
+          </div>
+        </div>
+        <div class="flag-row">
+          <input type="checkbox" id="flag-econ" onchange="setFlag('econ_filter', this.checked)">
+          <div>
+            <div class="flag-label">Economic Calendar Skip</div>
+            <div class="flag-desc">No new entries during FOMC, CPI, NFP, and other high-impact events.</div>
+          </div>
+        </div>
+        <div class="flag-row">
+          <input type="checkbox" id="flag-gls" onchange="setFlag('gls_gate', this.checked)">
+          <div>
+            <div class="flag-label">GreenLight Score Gate</div>
+            <div class="flag-desc">Only trade when market conditions score above threshold. Half-size at 50-70, full-size at 70+.</div>
+          </div>
+        </div>
+        <div class="flag-row">
+          <input type="checkbox" id="flag-htf" onchange="setFlag('htf_bias_gate', this.checked)">
+          <div>
+            <div class="flag-label">HTF Bias Gate</div>
+            <div class="flag-desc">Weekly/monthly trend must align with trade direction. Blocks longs in bear weeks. Core edge.</div>
+          </div>
+        </div>
+        <div class="flag-row">
+          <input type="checkbox" id="flag-consec" onchange="setFlag('consecutive_loss_pause', this.checked)">
+          <div>
+            <div class="flag-label">Consecutive Loss Pause</div>
+            <div class="flag-desc">After 3 consecutive losses on the same day, pause trading for the rest of the session. Reduces tilt.</div>
+          </div>
+        </div>
+        <div class="flag-row">
+          <input type="checkbox" id="flag-partial" onchange="setFlag('half_stop', this.checked)">
+          <div>
+            <div class="flag-label">Half-Stop at 0.3R</div>
+            <div class="flag-desc">Exit 50% of position at -0.3R adverse move. Reduces average loss from -1R to -0.65R. Priority 1.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /card -->
+
+  <!-- PROJECTED PERFORMANCE BOX -->
+  <div class="card anim" style="margin-top:20px;" id="projection-card">
+    <div class="card-title">Projected Performance — All Risk Modes (1 contract baseline × mode multiplier)</div>
+    <p style="font-size:11px;color:var(--text-3);margin-bottom:16px;">
+      Based on verified backtest: 470 trades | 62.6% win | PF 2.19 | +$144,701 over 259 days.
+      Scaling a profitable system amplifies P&L linearly; PF and win rate stay identical.
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;padding:8px 10px;color:var(--text-3);font-weight:600;">Mode</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text-3);font-weight:600;">Contracts</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text-3);font-weight:600;">Daily Avg</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text-3);font-weight:600;">Ann P&amp;L</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text-3);font-weight:600;">Max DD</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text-3);font-weight:600;">PF</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text-3);font-weight:600;">Win %</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text-3);font-weight:600;">Capital Needed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:10px;color:var(--profit);font-weight:700;">🛡️ Safe</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">1</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--profit);">+$559</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--profit);">+$140k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$6.4k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.19</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">62.6%</td>
+          <td style="padding:10px;color:var(--text-2);">~$30k</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:10px;color:var(--amber);font-weight:700;">⚖️ Medium</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">2–3</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--amber);">+$1,118–$1,677</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--amber);">+$281k–$422k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$12.8k–$19.2k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.19</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">62.6%</td>
+          <td style="padding:10px;color:var(--text-2);">~$60–90k</td>
+        </tr>
+        <tr>
+          <td style="padding:10px;color:var(--loss);font-weight:700;">⚡ Hardcore</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">4–5</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">+$2,236–$2,795</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">+$563k–$704k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$25.6k–$32k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.19</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">62.6%</td>
+          <td style="padding:10px;color:var(--text-2);">~$120–150k</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================================================================
+   BOT CONTROL PANEL — JavaScript
+================================================================ */
+
+let currentState = {};
+let ibkrBalance  = null;
+
+// ── Toast ────────────────────────────────────────────────────────
+function toast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = `toast show ${type}`;
+  clearTimeout(t._to);
+  t._to = setTimeout(() => { t.className = 'toast'; }, 3000);
+}
+
+// ── Load state ────────────────────────────────────────────────────
+async function loadState() {
+  try {
+    const r = await fetch('/api/bot/status');
+    if (!r.ok) return;
+    currentState = await r.json();
+    renderState(currentState);
+  } catch(e) { console.error('state load failed', e); }
+}
+
+function renderState(s) {
+  // Status bar
+  const running = s.bot_running;
+  document.getElementById('stat-status').innerHTML = running
+    ? '<span class="running-pill on"><span class="pulse"></span>RUNNING</span>'
+    : '<span class="running-pill off"><span class="pulse"></span>STOPPED</span>';
+
+  const mode = s.risk_mode || 'medium';
+  const modeColors = { safe: 'green', medium: 'amber', hardcore: 'red' };
+  const modeEl = document.getElementById('stat-mode');
+  modeEl.textContent = mode.toUpperCase();
+  modeEl.className   = `value ${modeColors[mode] || 'amber'}`;
+
+  const eff = s.account_override
+    ? s.account_override
+    : (ibkrBalance !== null ? ibkrBalance : null);
+  document.getElementById('stat-balance').textContent = eff ? '$' + eff.toLocaleString() : '—';
+
+  const pnl = s.daily_pnl || 0;
+  const pnlEl = document.getElementById('stat-pnl');
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toLocaleString();
+  pnlEl.className   = `value ${pnl >= 0 ? 'green' : 'red'}`;
+
+  document.getElementById('stat-trades').textContent = s.daily_trades || 0;
+
+  const cfg = s.active_mode_config || {};
+  document.getElementById('stat-cap').textContent = cfg.daily_loss_cap_usd
+    ? '-$' + cfg.daily_loss_cap_usd.toLocaleString()
+    : '—';
+
+  // Risk mode card highlights
+  ['safe','medium','hardcore'].forEach(m => {
+    const card = document.getElementById('card-' + m);
+    if (!card) return;
+    // Remove old active classes
+    card.className = card.className.replace(/\s*active-\w+/, '').replace(/\s*has-badge/, '');
+    // Remove existing badge
+    const old = card.querySelector('.active-badge');
+    if (old) old.remove();
+    if (m === mode) {
+      card.className += ` active-${m}`;
+      const badge = document.createElement('div');
+      badge.className = `active-badge ${m}-badge`;
+      badge.textContent = 'ACTIVE';
+      card.appendChild(badge);
+    }
+  });
+
+  // Bot control buttons
+  document.getElementById('btn-start').disabled = running;
+  document.getElementById('btn-stop').disabled  = !running;
+  document.getElementById('bot-status-label').textContent = running
+    ? `Bot is RUNNING in ${mode.toUpperCase()} mode — paper trading active`
+    : 'Bot is stopped. Click Start to begin paper trading.';
+
+  // Override display
+  if (s.account_override) {
+    document.getElementById('override-input').value = s.account_override;
+    document.getElementById('override-status').textContent = `Override active: $${s.account_override.toLocaleString()}`;
+  } else {
+    document.getElementById('override-input').value = '';
+    document.getElementById('override-status').textContent = 'No override — using live IBKR balance';
+  }
+
+  // Effective balance for sizing
+  const effBal = s.account_override || ibkrBalance || 150000;
+  document.getElementById('effective-balance').textContent = '$' + effBal.toLocaleString();
+  document.getElementById('calc-account').value = effBal;
+  runCalc();
+}
+
+// ── Load IBKR balance ────────────────────────────────────────────
+async function loadIBKRBalance() {
+  try {
+    const r = await fetch('/api/ibkr/balance');
+    const d = await r.json();
+    if (d.connected && d.balance !== null) {
+      ibkrBalance = d.balance;
+      document.getElementById('live-balance').childNodes[0].textContent =
+        '$' + d.balance.toLocaleString(undefined, {minimumFractionDigits:2});
+      document.getElementById('balance-tag').textContent = 'Live from IBKR TWS';
+    } else {
+      document.getElementById('live-balance').childNodes[0].textContent = 'Not connected';
+      document.getElementById('balance-tag').textContent = d.error || 'TWS not running on port 7497';
+    }
+  } catch(e) {
+    document.getElementById('live-balance').childNodes[0].textContent = 'Error';
+    document.getElementById('balance-tag').textContent = 'Could not reach IBKR API';
+  }
+}
+
+// ── Risk mode selection ──────────────────────────────────────────
+async function selectMode(mode) {
+  try {
+    const r = await fetch('/api/bot/mode', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Risk mode set to ${mode.toUpperCase()}`, 'ok');
+      await loadState();
+      runCalc();
+    } else {
+      toast(d.error || 'Failed to set mode', 'err');
+    }
+  } catch(e) { toast('Network error', 'err'); }
+}
+
+// ── Account override ─────────────────────────────────────────────
+async function setOverride() {
+  const val = parseFloat(document.getElementById('override-input').value);
+  if (!val || val < 1000) { toast('Enter a valid balance ($1,000+)', 'err'); return; }
+  try {
+    const r = await fetch('/api/bot/account', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ balance: val }),
+    });
+    const d = await r.json();
+    if (d.ok) { toast(`Balance override set to $${val.toLocaleString()}`, 'ok'); await loadState(); }
+    else       { toast(d.error || 'Failed', 'err'); }
+  } catch(e) { toast('Network error', 'err'); }
+}
+
+async function clearOverride() {
+  try {
+    const r = await fetch('/api/bot/account', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ balance: null }),
+    });
+    const d = await r.json();
+    if (d.ok) { toast('Override cleared — using live IBKR balance', 'ok'); await loadState(); }
+    else       { toast(d.error || 'Failed', 'err'); }
+  } catch(e) { toast('Network error', 'err'); }
+}
+
+// ── Position calculator ──────────────────────────────────────────
+async function runCalc() {
+  const acct   = parseFloat(document.getElementById('calc-account').value) || 150000;
+  const market = document.getElementById('calc-market').value || 'ES';
+  const atr    = parseFloat(document.getElementById('calc-atr').value) || 20;
+
+  try {
+    const r = await fetch(`/api/bot/position_calc?account=${acct}&market=${market}&atr=${atr}`);
+    const d = await r.json();
+    if (!d.sizes) return;
+    const modes = ['safe','medium','hardcore'];
+    modes.forEach(m => {
+      const s = d.sizes[m];
+      if (!s) return;
+      document.getElementById(`calc-${m}-cts`).textContent = s.contracts;
+      document.getElementById(`calc-${m}-sub`).textContent = s.contracts === 1 ? 'contract' : 'contracts';
+      document.getElementById(`calc-${m}-risk`).textContent =
+        `Max risk: $${Math.round(s.max_loss_usd).toLocaleString()} | $${Math.round(s.dollar_per_ct).toLocaleString()}/ct`;
+    });
+  } catch(e) { /* offline — skip */ }
+}
+
+// ── Bot start/stop ───────────────────────────────────────────────
+async function botStart() {
+  const r = await fetch('/api/bot/start', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) { toast('Bot started — paper trading active', 'ok'); await loadState(); }
+  else       { toast('Failed to start', 'err'); }
+}
+
+async function botStop() {
+  const r = await fetch('/api/bot/stop', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) { toast('Bot stopped', 'ok'); await loadState(); }
+  else       { toast('Failed to stop', 'err'); }
+}
+
+// ── Extensive backtest ───────────────────────────────────────────
+async function runExtensive() {
+  const btn  = document.getElementById('btn-extensive');
+  const lbl  = document.getElementById('backtest-status-label');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="mini-spin"></span> Running...';
+  lbl.textContent = 'Backtest running... takes ~2 minutes. Dashboard will update automatically.';
+
+  try {
+    const r = await fetch('/api/run_extensive_backtest', { method: 'POST' });
+    const d = await r.json();
+    if (d.status === 'started') {
+      toast('Backtest started — check dashboard in ~2 min', 'ok');
+      pollBacktest();
+    } else {
+      toast(d.message || 'Already running', 'ok');
+      pollBacktest();
+    }
+  } catch(e) {
+    toast('Network error', 'err');
+    btn.disabled = false;
+    btn.innerHTML = '↻ Run Full Backtest';
+  }
+}
+
+function pollBacktest() {
+  const btn = document.getElementById('btn-extensive');
+  const lbl = document.getElementById('backtest-status-label');
+  const iv  = setInterval(async () => {
+    try {
+      const r = await fetch('/api/extensive_backtest_status');
+      const d = await r.json();
+      if (!d.running) {
+        clearInterval(iv);
+        btn.disabled = false;
+        btn.innerHTML = '↻ Run Full Backtest';
+        lbl.textContent = 'Backtest complete — dashboard updated.';
+        toast('Backtest complete! Open dashboard to see results.', 'ok');
+      }
+    } catch(e) { clearInterval(iv); btn.disabled = false; btn.innerHTML = '↻ Run Full Backtest'; }
+  }, 5000);
+}
+
+// ── Strategy flags (plugins) ─────────────────────────────────────
+const FLAG_MAP = {
+  'flag-vix':     'vix_filter',
+  'flag-econ':    'econ_filter',
+  'flag-gls':     'gls_gate',
+  'flag-htf':     'htf_bias_gate',
+  'flag-consec':  'consecutive_loss_pause',
+  'flag-partial': 'half_stop',
+};
+
+async function loadFlags() {
+  try {
+    const r = await fetch('/api/bot/flags');
+    if (!r.ok) return;
+    const flags = await r.json();
+    for (const [elemId, flagKey] of Object.entries(FLAG_MAP)) {
+      const el = document.getElementById(elemId);
+      if (el && flagKey in flags) el.checked = flags[flagKey];
+    }
+  } catch(e) { console.warn('flags load failed', e); }
+}
+
+async function setFlag(flagKey, value) {
+  try {
+    const r = await fetch('/api/bot/flags', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ [flagKey]: value }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`${flagKey}: ${value ? 'ON' : 'OFF'}`, 'ok');
+    } else {
+      toast(d.error || 'Failed to save flag', 'err');
+    }
+  } catch(e) { toast('Network error saving flag', 'err'); }
+}
+
+// ── Init ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadIBKRBalance();
+  await loadState();
+  await loadFlags();
+  // Refresh state every 10 seconds
+  setInterval(loadState, 10000);
+});
+</script>
+</body>
+</html>

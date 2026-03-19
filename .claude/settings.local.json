@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(conda run:*)",
+      "Bash(python3:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(start AlgoBot Paper Trading:*)",
+      "Bash(powershell:*)",
+      "Bash(\"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe\":*)",
+      "Bash(wmic process:*)",
+      "Bash(PYTHONUTF8=1 \"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe\":*)",
+      "Bash(PYTHONUTF8=1 \"C:/Users/ghost/miniconda3/envs/algobot_env/python.exe\" scripts/run_sc_backtest.py)"
+    ]
+  }
+}

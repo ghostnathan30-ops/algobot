@@ -356,6 +356,16 @@ def add_htf_bias(df: pd.DataFrame, config: dict, market: str) -> pd.DataFrame:
     df["htf_monthly_bias"]  = monthly_bias
     df["htf_combined_bias"] = combined_bias
 
+    # ── Fast daily bias: EMA(10) vs EMA(20) on daily closes ───────────────────
+    # Reacts within 1-5 days to trend shifts (vs 1-2 weeks for weekly HTF).
+    # Used in FHB position sizing to reduce size early in bear transitions.
+    _ema10 = df["Close"].ewm(span=10, adjust=False).mean()
+    _ema20 = df["Close"].ewm(span=20, adjust=False).mean()
+    df["fast_bias"] = np.where(
+        _ema10 > _ema20, BULL,
+        np.where(_ema10 < _ema20, BEAR, NEUTRAL)
+    )
+
     # ── Log summary ────────────────────────────────────────────────────────────
     if len(df) > 0:
         tail = df.tail(252)  # Last year

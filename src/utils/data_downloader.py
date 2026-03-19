@@ -97,6 +97,16 @@ MARKET_CONFIG = {
         "futures":  "6E=F",      # Euro FX futures (limited yfinance history)
         "note":     "EURUSD=X has good 20+ year history.",
     },
+    "RTY": {
+        "primary":  "IWM",       # iShares Russell 2000 ETF -- 2000 to present
+        "futures":  "RTY=F",     # E-mini Russell 2000 futures
+        "note":     "IWM is the standard Russell 2000 proxy. $50/point futures.",
+    },
+    "YM": {
+        "primary":  "DIA",       # SPDR Dow Jones ETF -- 1998 to present
+        "futures":  "YM=F",      # E-mini Dow Jones futures
+        "note":     "DIA is the standard Dow Jones proxy. $5/point futures.",
+    },
 }
 
 # FRED macro series used for regime detection and research
