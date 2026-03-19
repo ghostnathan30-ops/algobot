@@ -474,6 +474,52 @@ td.bold{color:var(--t1);font-weight:600}
   .chart-row.c2{grid-template-columns:1fr}
   .content{padding:.85rem}
 }
+
+/* ─── SC Results tab ─────────────────────────────────────── */
+.verdict-banner{border-radius:var(--r-md);padding:.9rem 1.1rem;display:flex;align-items:flex-start;gap:.9rem}
+.verdict-banner.pass{background:rgba(48,209,88,.07);border:1px solid rgba(48,209,88,.28)}
+.verdict-banner.fail{background:rgba(255,69,58,.07);border:1px solid rgba(255,69,58,.25)}
+.verdict-banner.loading{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.v-icon{font-size:1.5rem;flex-shrink:0;line-height:1;padding-top:.05rem}
+.v-body{flex:1;min-width:0}
+.v-title{font-size:.92rem;font-weight:700;margin-bottom:.22rem}
+.v-pass{color:var(--green)}.v-fail{color:var(--red)}.v-load{color:var(--t3)}
+.v-sub{font-size:.7rem;color:var(--t3);line-height:1.4}
+.v-checks{display:grid;grid-template-columns:repeat(3,1fr);gap:.12rem .6rem;flex-shrink:0}
+@media(max-width:1000px){.v-checks{grid-template-columns:1fr 1fr}}
+.chk{font-size:.65rem;display:flex;align-items:center;gap:.3rem;white-space:nowrap;padding:.05rem 0}
+.chk.ok{color:var(--green)}.chk.no{color:var(--red)}
+
+.proj-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:.85rem}
+@media(max-width:1100px){.proj-grid{grid-template-columns:repeat(2,1fr)}}
+.proj-cell{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);padding:.9rem 1rem;text-align:center}
+.proj-cell.c-blue{border-color:rgba(10,132,255,.3);background:rgba(10,132,255,.05)}
+.proj-cell.c-green{border-color:rgba(48,209,88,.3);background:rgba(48,209,88,.04)}
+.proj-cell.c-warn{border-color:rgba(255,159,10,.38);background:rgba(255,159,10,.05)}
+.proj-cell.c-red{border-color:rgba(255,69,58,.35);background:rgba(255,69,58,.04)}
+.proj-lbl{font-size:.6rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--t3);margin-bottom:.42rem}
+.proj-val{font-size:1.28rem;font-weight:700;color:var(--t1);font-variant-numeric:tabular-nums;line-height:1}
+.proj-sub{font-size:.61rem;color:var(--t3);margin-top:.28rem}
+.dd-bar-wrap{height:6px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;margin-top:.38rem}
+.dd-bar{height:100%;border-radius:3px;transition:width .6s ease}
+
+.strat-cmp{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;margin-bottom:.85rem}
+@media(max-width:960px){.strat-cmp{grid-template-columns:1fr}}
+.s-kpi{display:flex;justify-content:space-between;align-items:center;padding:.27rem 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.s-kpi:last-child{border:none}
+.s-key{font-size:.72rem;color:var(--t3)}
+.s-val{font-family:'JetBrains Mono',monospace;font-size:.76rem;font-weight:600;color:var(--t1)}
+.s-val.pos{color:var(--green)}.s-val.neg{color:var(--red)}.s-val.blue{color:var(--blue)}.s-val.ora{color:var(--orange)}
+
+.mkt-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
+@media(max-width:1000px){.mkt-grid-2{grid-template-columns:1fr}}
+
+/* Compact SC summary in Overview */
+.sc-ov{display:flex;gap:1.1rem;flex-wrap:wrap;align-items:center}
+.sc-ov-kpi{text-align:center;min-width:72px;flex:1}
+.sc-ov-val{font-size:1.18rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.sc-ov-lbl{font-size:.59rem;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:.2rem}
+.sc-ov-div{width:1px;background:var(--border);align-self:stretch;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -501,6 +547,10 @@ td.bold{color:var(--t1);font-weight:600}
     <div class="nav-item active" onclick="showTab('overview',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
       Overview
+    </div>
+    <div class="nav-item" id="nav-sc" onclick="showTab('sc',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      SC Validation
     </div>
     <div class="nav-item" onclick="showTab('control',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
@@ -610,14 +660,17 @@ td.bold{color:var(--t1);font-weight:600}
         <div class="hm-wrap" id="chart-monthly"></div>
       </div>
 
-      <!-- Sierra Charts Validation -->
+      <!-- Sierra Charts Validation — compact summary -->
       <div class="card" style="margin-bottom:1rem" id="sc-validation-card">
         <div class="card-hdr">
           <span class="card-ttl">Sierra Charts Real-Data Validation</span>
-          <span class="card-meta" id="sc-meta" style="color:var(--t3)">Loading…</span>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <span class="card-meta" id="sc-meta" style="color:var(--t3)">Loading…</span>
+            <button class="btn blue" style="font-size:.65rem;padding:.22rem .55rem" onclick="showTab('sc',document.getElementById('nav-sc'))">Full Results →</button>
+          </div>
         </div>
         <div id="sc-results-body">
-          <div class="empty" style="padding:.8rem 0">No SC backtest results yet — run <b>SC Real-Data Backtest</b> from the Terminal tab.</div>
+          <div class="empty" style="padding:.6rem 0">No SC backtest results yet — run <b>SC Real-Data Backtest</b> from the Terminal tab.</div>
         </div>
       </div>
 
@@ -661,6 +714,110 @@ td.bold{color:var(--t1);font-weight:600}
           <span class="pg-info" id="pg-info">—</span>
           <button onclick="nextPage()" id="btn-next" disabled>Next →</button>
         </div>
+      </div>
+
+    </section>
+
+    <!-- ══ SC RESULTS ════════════════════════════════════════════ -->
+    <section class="tab" id="tab-sc">
+
+      <!-- Verdict banner -->
+      <div class="verdict-banner loading" id="sc-verdict-banner" style="margin-bottom:.85rem">
+        <span class="v-icon" id="sc-v-icon">📊</span>
+        <div class="v-body">
+          <div class="v-title v-load" id="sc-v-title">Loading Sierra Charts backtest results…</div>
+          <div class="v-sub" id="sc-v-sub">Sierra Charts real futures data · OOS window Nov 2025 – Mar 2026</div>
+        </div>
+        <div class="v-checks" id="sc-v-checks"></div>
+      </div>
+
+      <!-- Summary KPIs -->
+      <div class="kpi-grid" style="margin-bottom:.85rem">
+        <div class="kpi"><div class="kpi-lbl">Combined PF</div><div class="kpi-val blue" id="sc-kpi-pf">—</div><div class="kpi-sub" id="sc-kpi-pf-sub">FHB · ORB</div><div class="kpi-bar b"></div></div>
+        <div class="kpi"><div class="kpi-lbl">Win Rate</div><div class="kpi-val" id="sc-kpi-wr">—</div><div class="kpi-sub" id="sc-kpi-wr-sub">All strategies</div><div class="kpi-bar b"></div></div>
+        <div class="kpi"><div class="kpi-lbl">Total P&amp;L</div><div class="kpi-val pos" id="sc-kpi-pnl">—</div><div class="kpi-sub" id="sc-kpi-pnl-sub">Real futures</div><div class="kpi-bar g"></div></div>
+        <div class="kpi"><div class="kpi-lbl">Max Drawdown</div><div class="kpi-val neg" id="sc-kpi-mdd">—</div><div class="kpi-sub" id="sc-kpi-mdd-sub">Portfolio level</div><div class="kpi-bar r"></div></div>
+        <div class="kpi"><div class="kpi-lbl">Sharpe (daily)</div><div class="kpi-val" id="sc-kpi-sh">—</div><div class="kpi-sub" id="sc-kpi-sh-sub">Annualised ×√252</div><div class="kpi-bar b"></div></div>
+        <div class="kpi"><div class="kpi-lbl">Trades / Day</div><div class="kpi-val" id="sc-kpi-tpd">—</div><div class="kpi-sub" id="sc-kpi-tpd-sub">FHB + ORB</div><div class="kpi-bar g"></div></div>
+      </div>
+
+      <!-- TopStep $50k Projections -->
+      <div class="card" style="margin-bottom:.85rem">
+        <div class="card-hdr">
+          <span class="card-ttl">TopStep $50k Account — Profitability Projections</span>
+          <span class="card-meta" style="color:var(--orange);font-size:.65rem">Based on real SC OOS data</span>
+        </div>
+        <div class="proj-grid">
+          <div class="proj-cell c-green">
+            <div class="proj-lbl">Monthly Projected P&L</div>
+            <div class="proj-val pos" id="sc-proj-mo">—</div>
+            <div class="proj-sub" id="sc-proj-mo-sub">21 trading days</div>
+          </div>
+          <div class="proj-cell c-blue">
+            <div class="proj-lbl">Annual Projected P&L</div>
+            <div class="proj-val pos" id="sc-proj-yr">—</div>
+            <div class="proj-sub" id="sc-proj-yr-sub">% return on $50k</div>
+          </div>
+          <div class="proj-cell" id="sc-dd-cell">
+            <div class="proj-lbl">Max DD vs TopStep Limit</div>
+            <div class="proj-val" id="sc-proj-dd">—</div>
+            <div class="proj-sub">Trailing limit: $2,000</div>
+            <div class="dd-bar-wrap"><div class="dd-bar" id="sc-dd-bar" style="width:0%"></div></div>
+          </div>
+          <div class="proj-cell" id="sc-dlb-cell">
+            <div class="proj-lbl">Daily Loss Buffer</div>
+            <div class="proj-val" id="sc-proj-dlb">—</div>
+            <div class="proj-sub">Daily limit: $1,000</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem" id="sc-ts-stats"></div>
+      </div>
+
+      <!-- Projected Account Growth chart -->
+      <div class="chart-row c1" style="margin-bottom:.85rem">
+        <div class="card chart-card h320">
+          <div class="card-hdr">
+            <span class="card-ttl">$50k Account — 1-Year Growth Projection</span>
+            <span class="card-meta" id="sc-chart-meta">Based on avg daily P&amp;L from SC real-data window</span>
+          </div>
+          <div class="chart-el" id="sc-chart-equity"></div>
+        </div>
+      </div>
+
+      <!-- Strategy Comparison -->
+      <div class="strat-cmp">
+        <div class="card">
+          <div class="card-hdr">
+            <span class="card-ttl">FHB — First Hour Breakout</span>
+            <span class="card-meta" id="sc-fhb-hdr">—</span>
+          </div>
+          <div id="sc-fhb-body"></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr">
+            <span class="card-ttl">ORB — Opening Range Breakout</span>
+            <span class="card-meta" id="sc-orb-hdr">—</span>
+          </div>
+          <div id="sc-orb-body"></div>
+        </div>
+      </div>
+
+      <!-- Per-market detail tables -->
+      <div class="mkt-grid-2" style="margin-top:.85rem">
+        <div class="card">
+          <div class="card-hdr"><span class="card-ttl">FHB — By Market</span><span class="card-meta">NQ · MNQ · GC · MGC · CL</span></div>
+          <div class="tbl-wrap" id="sc-fhb-tbl"></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-ttl">ORB — By Market</span><span class="card-meta">NQ</span></div>
+          <div class="tbl-wrap" id="sc-orb-tbl"></div>
+        </div>
+      </div>
+
+      <!-- Data window info -->
+      <div class="card" style="margin-top:.85rem">
+        <div class="card-hdr"><span class="card-ttl">Backtest Window</span><span class="card-meta">True out-of-sample — data never seen during strategy development</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.5rem" id="sc-window-info"></div>
       </div>
 
     </section>
@@ -819,12 +976,13 @@ function showTab(id,el){
   document.getElementById('tab-'+id).classList.add('active');
   if(el) el.classList.add('active');
   S.tab=id;
-  const titles={overview:'Overview',control:'Control Center',terminal:'Terminal',status:'System Status'};
+  const titles={overview:'Overview',sc:'SC Backtest Results',control:'Control Center',terminal:'Terminal',status:'System Status'};
   document.getElementById('page-title').textContent=titles[id]||id;
   if(id==='overview') loadOverview();
-  if(id==='control') loadControl();
+  if(id==='sc')       loadSCTab();
+  if(id==='control')  loadControl();
   if(id==='terminal') loadScripts();
-  if(id==='status') refreshHealth();
+  if(id==='status')   refreshHealth();
 }
 function toggleSidebar(){
   const sb=document.getElementById('sidebar');
@@ -924,68 +1082,293 @@ function renderHGrid(h){
     </div>`).join('');
 }
 
-// ─── Sierra Charts Validation Panel ──────────────────────────────
+// ─── SC Overview compact summary ─────────────────────────────────
 async function loadSCResults(){
   const d = await api('/api/sc/results');
-  const meta = document.getElementById('sc-meta');
+  const metaEl = document.getElementById('sc-meta');
   const body = document.getElementById('sc-results-body');
   if(!body) return;
   if(!d || d.error){
-    meta.textContent = 'No results yet';
+    if(metaEl) metaEl.textContent = 'No results yet';
     return;
   }
-  const ts = d.generated_at ? d.generated_at.slice(0,16).replace('T',' ')+'Z' : '—';
-  meta.textContent = 'Last run: '+ts;
   const ac = d.all_combined || {};
   const fc = d.fhb_combined || {};
   const oc = d.orb_combined || {};
   const pf = ac.profit_factor || 0;
-  const verdict = pf >= 1.5 ? 'PASS — Edge confirmed on real futures data' : 'FAIL — Below threshold';
-  const vCls = pf >= 1.5 ? 'pos' : 'neg';
+  const ts = d.generated_at ? d.generated_at.slice(0,16).replace('T',' ') : '—';
+  if(metaEl) metaEl.textContent = ts;
 
-  // Build market breakdown rows
-  function mktRows(mapObj) {
-    if(!mapObj) return '<tr><td colspan="6" class="dim">No data</td></tr>';
-    return Object.entries(mapObj).map(([mkt,m])=>{
-      if(!m || m.total_trades===0) return '';
-      const pf_ = m.profit_factor == null ? '∞' : Number(m.profit_factor).toFixed(2);
-      const pnl = m.total_net_pnl;
-      return `<tr>
-        <td><b>${mkt}</b></td>
-        <td>${m.total_trades}</td>
-        <td>${Number(m.win_rate_pct).toFixed(1)}%</td>
-        <td class="blue">${pf_}</td>
-        <td class="${pnl>=0?'pos':'neg'}">${fmt$(pnl)}</td>
-        <td class="neg">${fmt$(m.max_drawdown_usd)}</td>
-      </tr>`;
-    }).join('');
-  }
+  const passed = pf>=1.5 && (ac.win_rate_pct||0)>=45 && (ac.sharpe_daily||0)>=1 && Math.abs(ac.max_drawdown||0)<2000;
+  const tagCls = passed ? 'ok' : 'err';
+  const tagTxt = passed ? '6/6 PASSED' : 'REVIEW';
+  const adp = ac.avg_daily_pnl || 0;
+  const monthlyEst = adp * 21;
 
   body.innerHTML = `
-    <div class="kpi-grid" style="margin-bottom:.8rem">
-      <div class="kpi"><div class="kpi-lbl">Combined PF</div><div class="kpi-val blue">${(pf||0).toFixed(2)}</div><div class="kpi-sub">${ac.total_trades||0} trades</div></div>
-      <div class="kpi"><div class="kpi-lbl">Win Rate</div><div class="kpi-val ${(ac.win_rate_pct||0)>=50?'pos':'neg'}">${(ac.win_rate_pct||0).toFixed(1)}%</div><div class="kpi-sub">All strategies</div></div>
-      <div class="kpi"><div class="kpi-lbl">Total P&amp;L</div><div class="kpi-val ${(ac.total_pnl||0)>=0?'pos':'neg'}">${fmt$(ac.total_pnl)}</div><div class="kpi-sub">${ac.trading_days||0} days</div></div>
-      <div class="kpi"><div class="kpi-lbl">Max Drawdown</div><div class="kpi-val neg">${fmt$(ac.max_drawdown)}</div><div class="kpi-sub">Portfolio level</div></div>
-      <div class="kpi"><div class="kpi-lbl">Sharpe (daily)</div><div class="kpi-val ${(ac.sharpe_daily||0)>=1?'pos':'neg'}">${(ac.sharpe_daily||0).toFixed(2)}</div><div class="kpi-sub">Annualised ×√252</div></div>
-      <div class="kpi"><div class="kpi-lbl">Trades/Day</div><div class="kpi-val">${(ac.trades_per_day||0).toFixed(1)}</div><div class="kpi-sub">FHB+ORB combined</div></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:.7rem">
-      <div>
-        <div class="card-ttl" style="margin-bottom:.4rem">FHB by Market (PF=${(fc.profit_factor||0).toFixed(2)}, Win=${(fc.win_rate_pct||0).toFixed(1)}%)</div>
-        <table style="width:100%;font-size:.72rem"><thead><tr><th>Mkt</th><th>N</th><th>Win%</th><th>PF</th><th>P&amp;L</th><th>MDD</th></tr></thead>
-        <tbody>${mktRows(d.fhb_by_market)}</tbody></table>
+    <div style="display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;padding:.1rem 0">
+      <span class="tag ${tagCls}" style="font-size:.68rem;padding:.18rem .55rem">${tagTxt}</span>
+      <div class="sc-ov">
+        <div class="sc-ov-kpi"><div class="sc-ov-val blue">${pf.toFixed(2)}</div><div class="sc-ov-lbl">Profit Factor</div></div>
+        <div class="sc-ov-div"></div>
+        <div class="sc-ov-kpi"><div class="sc-ov-val ${(ac.win_rate_pct||0)>=50?'pos':''}">${(ac.win_rate_pct||0).toFixed(1)}%</div><div class="sc-ov-lbl">Win Rate</div></div>
+        <div class="sc-ov-div"></div>
+        <div class="sc-ov-kpi"><div class="sc-ov-val pos">${fmt$(ac.total_pnl)}</div><div class="sc-ov-lbl">Total P&L</div></div>
+        <div class="sc-ov-div"></div>
+        <div class="sc-ov-kpi"><div class="sc-ov-val neg">${fmt$(ac.max_drawdown)}</div><div class="sc-ov-lbl">Max DD</div></div>
+        <div class="sc-ov-div"></div>
+        <div class="sc-ov-kpi"><div class="sc-ov-val ${(ac.sharpe_daily||0)>=1?'pos':''}">${(ac.sharpe_daily||0).toFixed(2)}</div><div class="sc-ov-lbl">Sharpe</div></div>
+        <div class="sc-ov-div"></div>
+        <div class="sc-ov-kpi"><div class="sc-ov-val pos">${fmt$(monthlyEst)}</div><div class="sc-ov-lbl">Est./Month</div></div>
       </div>
-      <div>
-        <div class="card-ttl" style="margin-bottom:.4rem">ORB by Market (PF=${(oc.profit_factor||0).toFixed(2)}, Win=${(oc.win_rate_pct||0).toFixed(1)}%)</div>
-        <table style="width:100%;font-size:.72rem"><thead><tr><th>Mkt</th><th>N</th><th>Win%</th><th>PF</th><th>P&amp;L</th><th>MDD</th></tr></thead>
-        <tbody>${mktRows(d.orb_by_market)}</tbody></table>
-      </div>
-    </div>
-    <div style="padding:.5rem .7rem;border-radius:6px;background:rgba(255,255,255,.04);font-size:.72rem">
-      <b>Verdict:</b> <span class="${vCls}">${verdict}</span>
-      &nbsp;·&nbsp; Data source: Sierra Charts real futures data &nbsp;·&nbsp; Contracts: NQ, MNQ, GC, MGC, CL
+      <div style="margin-left:auto;font-size:.68rem;color:var(--t3)">${ac.total_trades||0} trades · ${ac.trading_days||0} days · Sierra Charts futures</div>
     </div>`;
+}
+
+// ─── SC Results full tab ──────────────────────────────────────────
+async function loadSCTab(){
+  const d = await api('/api/sc/results');
+  const banner = document.getElementById('sc-verdict-banner');
+  const vTitle = document.getElementById('sc-v-title');
+  const vSub   = document.getElementById('sc-v-sub');
+  const vIcon  = document.getElementById('sc-v-icon');
+  const vChecks= document.getElementById('sc-v-checks');
+
+  if(!d || d.error){
+    banner.className = 'verdict-banner fail';
+    vTitle.className = 'v-title v-fail';
+    vTitle.textContent = 'No results — run SC Real-Data Backtest from the Terminal tab';
+    vSub.textContent = 'Sierra Charts validation not yet run';
+    return;
+  }
+
+  const ac  = d.all_combined  || {};
+  const fc  = d.fhb_combined  || {};
+  const oc  = d.orb_combined  || {};
+  const fhbM= d.fhb_by_market || {};
+  const orbM= d.orb_by_market || {};
+
+  const pf    = ac.profit_factor  || 0;
+  const wr    = ac.win_rate_pct   || 0;
+  const pnl   = ac.total_pnl     || 0;
+  const mdd   = ac.max_drawdown   || 0;   // negative
+  const sh    = ac.sharpe_daily   || 0;
+  const tpd   = ac.trades_per_day || 0;
+  const tdays = ac.trading_days   || 0;
+  const adp   = ac.avg_daily_pnl  || 0;
+  const ts    = d.generated_at ? d.generated_at.slice(0,16).replace('T',' ') : '—';
+
+  // ── Verdict checks ──────────────────────────────────────────────
+  const allFhbPos = Object.values(fhbM).every(m => (m.total_net_pnl||0) >= 0);
+  const allOrbPos = Object.values(orbM).every(m => (m.total_net_pnl||0) >= 0);
+  const checks = [
+    { lbl:`PF ${pf.toFixed(2)} ≥ 1.5`,          ok: pf >= 1.5 },
+    { lbl:`Win ${wr.toFixed(1)}% ≥ 45%`,         ok: wr >= 45 },
+    { lbl:`Sharpe ${sh.toFixed(1)} ≥ 1.0`,       ok: sh >= 1.0 },
+    { lbl:`DD $${Math.abs(mdd).toFixed(0)} < $2k`,ok: Math.abs(mdd) < 2000 },
+    { lbl:`FHB + ORB both profitable`,            ok: (fc.profit_factor||0)>=1 && (oc.profit_factor||0)>=1 },
+    { lbl:`All markets profitable`,              ok: allFhbPos && allOrbPos },
+  ];
+  const passed = checks.filter(c=>c.ok).length;
+  const allPass = passed === checks.length;
+
+  banner.className = 'verdict-banner ' + (allPass ? 'pass' : 'fail');
+  vIcon.textContent = allPass ? '✅' : '⚠️';
+  vTitle.className = 'v-title ' + (allPass ? 'v-pass' : 'v-fail');
+  vTitle.textContent = allPass
+    ? `Edge CONFIRMED — ${passed}/${checks.length} checks PASSED — Ready for TopStep paper trading`
+    : `${passed}/${checks.length} checks passed — Review before live trading`;
+  vSub.textContent = `Sierra Charts real futures · ${tdays} trading days OOS · NQ · MNQ · GC · MGC · CL · Generated ${ts}`;
+  vChecks.innerHTML = checks.map(c=>`<div class="chk ${c.ok?'ok':'no'}">${c.ok?'✓':'✗'} ${c.lbl}</div>`).join('');
+
+  // ── Summary KPIs ────────────────────────────────────────────────
+  setKV('sc-kpi-pf',  pf.toFixed(2), 'blue');
+  setKS('sc-kpi-pf-sub', `FHB ${(fc.profit_factor||0).toFixed(2)} · ORB ${(oc.profit_factor||0).toFixed(2)}`);
+  setKV('sc-kpi-wr',  wr.toFixed(1)+'%', wr>=50?'pos':'');
+  setKS('sc-kpi-wr-sub', `${ac.total_trades||0} total trades`);
+  setKV('sc-kpi-pnl', fmt$(pnl), pnl>=0?'pos':'neg');
+  setKS('sc-kpi-pnl-sub', `${tdays} trading days`);
+  setKV('sc-kpi-mdd', fmt$(mdd), 'neg');
+  setKS('sc-kpi-mdd-sub', `${(Math.abs(mdd)/2000*100).toFixed(0)}% of $2k TopStep limit`);
+  setKV('sc-kpi-sh',  sh.toFixed(2), sh>=1?'pos':'');
+  setKS('sc-kpi-sh-sub', 'Risk-adj daily return');
+  setKV('sc-kpi-tpd', tpd.toFixed(1), '');
+  setKS('sc-kpi-tpd-sub', `FHB ${(fc.trades_per_day||0).toFixed(1)} · ORB ${(oc.trades_per_day||0).toFixed(1)}`);
+
+  // ── TopStep $50k projections ─────────────────────────────────────
+  const ACCT  = 50000;
+  const TS_DD = 2000;
+  const TS_DL = 1000;
+  const TD_MO = 21;
+  const TD_YR = 252;
+
+  const moProj  = adp * TD_MO;
+  const yrProj  = adp * TD_YR;
+  const yrPct   = yrProj / ACCT * 100;
+  const mddAbs  = Math.abs(mdd);
+  const ddUsed  = mddAbs / TS_DD * 100;
+  const ddWarn  = ddUsed >= 80;
+
+  // Estimate worst day from per-market worst_day
+  let worstDay = 0;
+  Object.values(fhbM).forEach(m => { if(m.worst_day && Math.abs(m.worst_day) > worstDay) worstDay = Math.abs(m.worst_day); });
+  const dlBuf = TS_DL - worstDay;
+
+  document.getElementById('sc-proj-mo').textContent   = fmt$(moProj);
+  document.getElementById('sc-proj-mo').className     = 'proj-val pos';
+  document.getElementById('sc-proj-mo-sub').textContent = `${adp.toFixed(0)}/day × ${TD_MO} days`;
+
+  document.getElementById('sc-proj-yr').textContent   = fmt$(yrProj);
+  document.getElementById('sc-proj-yr').className     = 'proj-val pos';
+  document.getElementById('sc-proj-yr-sub').textContent = `+${yrPct.toFixed(0)}% return on $50k`;
+
+  document.getElementById('sc-proj-dd').textContent   = `${fmt$(mddAbs)} / $2,000`;
+  document.getElementById('sc-proj-dd').className     = 'proj-val ' + (ddWarn ? 'orange' : 'pos');
+  document.getElementById('sc-dd-cell').className     = 'proj-cell ' + (ddWarn ? 'c-warn' : 'c-green');
+  const barEl = document.getElementById('sc-dd-bar');
+  barEl.style.width    = Math.min(100, ddUsed).toFixed(0) + '%';
+  barEl.style.background = ddWarn ? 'var(--orange)' : 'var(--green)';
+
+  document.getElementById('sc-proj-dlb').textContent  = dlBuf >= 0 ? `${fmt$(dlBuf)} headroom` : 'EXCEEDED';
+  document.getElementById('sc-proj-dlb').className    = 'proj-val ' + (dlBuf >= 200 ? 'pos' : dlBuf >= 0 ? 'orange' : 'neg');
+  document.getElementById('sc-dlb-cell').className    = 'proj-cell ' + (dlBuf >= 200 ? 'c-green' : dlBuf >= 0 ? 'c-warn' : 'c-red');
+
+  const avgTrade = pnl / (ac.total_trades || 1);
+  const beDays   = mddAbs > 0 ? Math.ceil(mddAbs / adp) : 0;
+
+  document.getElementById('sc-ts-stats').innerHTML = [
+    { k:'Account Size',         v:'$50,000',                       cls:'' },
+    { k:'Trailing DD Limit',    v:'$2,000',                        cls:'' },
+    { k:'Daily Loss Limit',     v:'$1,000/day',                    cls:'' },
+    { k:'SC Max Drawdown',      v:fmt$(mddAbs),                    cls: mddAbs<1500?'ok':mddAbs<2000?'warn':'err' },
+    { k:'DD Limit Used',        v:`${ddUsed.toFixed(0)}%`,         cls: ddUsed<75?'':ddUsed<95?'warn':'err' },
+    { k:'Avg Trade P&L',        v:fmt$(avgTrade),                  cls: avgTrade>=0?'ok':'err' },
+    { k:'Avg Daily P&L',        v:`${fmt$(adp)}`,                  cls:'ok' },
+    { k:'Days to recover DD',   v:`${beDays} days`,                cls:'' },
+    { k:'Projected ROI / mo',   v:`+${(moProj/ACCT*100).toFixed(1)}%`, cls:'ok' },
+  ].map(({k,v,cls})=>`<div class="kv-row"><span class="kv-key">${k}</span><span class="kv-val ${cls}">${v}</span></div>`).join('');
+
+  // ── Equity projection chart ──────────────────────────────────────
+  const days = Array.from({length: TD_YR + 1}, (_,i) => i);
+  const eqBase = days.map(d => ACCT + adp * d);
+  const eqBull = days.map(d => ACCT + adp * d * 1.3);
+  const eqBear = days.map(d => ACCT + adp * d * 0.65);
+  const ddLine = Array(TD_YR + 1).fill(ACCT - TS_DD);
+
+  const tickVals = days.filter(d => d % 21 === 0);
+  const tickText = tickVals.map(d => d === 0 ? 'Start' : `Mo.${Math.floor(d/21)}`);
+
+  Plotly.react('sc-chart-equity', [
+    {
+      x: days, y: eqBull, name: 'Optimistic (+30%)',
+      type:'scatter', mode:'lines',
+      line:{color:'rgba(48,209,88,0.2)',width:1,dash:'dot'},
+      hoverinfo:'skip', showlegend:true,
+    },
+    {
+      x: days, y: eqBear, name: 'Conservative (−35%)',
+      type:'scatter', mode:'lines',
+      line:{color:'rgba(255,69,58,0.2)',width:1,dash:'dot'},
+      hoverinfo:'skip', showlegend:true,
+    },
+    {
+      x: days, y: eqBase, name: 'Expected (SC avg)',
+      type:'scatter', mode:'lines',
+      line:{color:'#30d158',width:2.5},
+      fill:'tonexty', fillcolor:'rgba(48,209,88,0.05)',
+      hovertemplate:'Day %{x}<br><b>$%{y:,.0f}</b><extra></extra>',
+    },
+    {
+      x: days, y: ddLine, name: 'TopStep DD limit',
+      type:'scatter', mode:'lines',
+      line:{color:'rgba(255,69,58,0.55)',width:1.5,dash:'dash'},
+      hoverinfo:'skip', showlegend:true,
+    },
+  ], {
+    ...applyLayout(),
+    yaxis:{...yAx(), tickprefix:'$', tickformat:',.0f', zeroline:false},
+    xaxis:{...xAx(), tickvals:tickVals, ticktext:tickText},
+    margin:{t:8,b:40,l:80,r:20},
+    legend:{x:.01,y:.99,bgcolor:'rgba(0,0,0,0)',font:{size:9,color:'rgba(255,255,255,0.35)'}},
+    showlegend:true,
+    annotations:[{
+      x: TD_YR, y: eqBase[TD_YR],
+      text: fmt$(eqBase[TD_YR]),
+      showarrow:false, xanchor:'right', yanchor:'bottom',
+      font:{color:'#30d158',size:11,family:'JetBrains Mono'},
+    }]
+  }, cfg());
+
+  document.getElementById('sc-chart-meta').textContent =
+    `Expected: $50k → ${fmt$(eqBase[TD_YR])} in 1 yr · Avg ${fmt$(adp)}/day from ${tdays}-day OOS window`;
+
+  // ── Strategy comparison ──────────────────────────────────────────
+  function stratBody(c) {
+    if(!c || !c.total_trades) return '<div class="empty">No data</div>';
+    return [
+      ['Profit Factor',   (c.profit_factor||0).toFixed(2), 'blue'],
+      ['Win Rate',        (c.win_rate_pct||0).toFixed(1)+'%', (c.win_rate_pct||0)>=50?'pos':''],
+      ['Total P&L',       fmt$(c.total_pnl),                 (c.total_pnl||0)>=0?'pos':'neg'],
+      ['Trades',          c.total_trades||0,                 ''],
+      ['Trading Days',    c.trading_days||0,                 ''],
+      ['Avg Daily P&L',   fmt$(c.avg_daily_pnl),             'pos'],
+      ['Trades / Day',    (c.trades_per_day||0).toFixed(2),  ''],
+      ['Max Drawdown',    fmt$(c.max_drawdown),               'neg'],
+      ['Sharpe (daily)',  (c.sharpe_daily||0).toFixed(2),    (c.sharpe_daily||0)>=1?'pos':''],
+    ].map(([k,v,cls])=>`<div class="s-kpi"><span class="s-key">${k}</span><span class="s-val ${cls}">${v}</span></div>`).join('');
+  }
+  document.getElementById('sc-fhb-hdr').textContent = `PF ${(fc.profit_factor||0).toFixed(2)} · Win ${(fc.win_rate_pct||0).toFixed(1)}% · ${fc.total_trades||0} trades`;
+  document.getElementById('sc-fhb-body').innerHTML  = stratBody(fc);
+  document.getElementById('sc-orb-hdr').textContent = `PF ${(oc.profit_factor||0).toFixed(2)} · Win ${(oc.win_rate_pct||0).toFixed(1)}% · ${oc.total_trades||0} trades`;
+  document.getElementById('sc-orb-body').innerHTML  = stratBody(oc);
+
+  // ── Market breakdown tables ──────────────────────────────────────
+  function mktTable(mkts) {
+    if(!mkts || !Object.keys(mkts).length) return '<div class="empty">No data</div>';
+    const rows = Object.entries(mkts)
+      .filter(([,m]) => m && (m.total_trades||0) > 0)
+      .map(([mkt,m]) => {
+        const pf_  = m.profit_factor == null ? '∞' : Number(m.profit_factor).toFixed(2);
+        const pnl_ = m.total_net_pnl || 0;
+        const wr_  = Number(m.win_rate_pct||0).toFixed(1);
+        const mdd_ = m.max_drawdown_usd || 0;
+        const aw_  = m.avg_win_usd  || 0;
+        const al_  = m.avg_loss_usd || 0;
+        const aR   = (m.avg_r_multiple||0).toFixed(2);
+        return `<tr>
+          <td class="bold">${mkt}</td>
+          <td class="mono r">${m.total_trades}</td>
+          <td class="r ${Number(wr_)>=50?'pos':''}">${wr_}%</td>
+          <td class="mono r blue">${pf_}</td>
+          <td class="mono r ${pnl_>=0?'pos':'neg'}">${fmt$(pnl_)}</td>
+          <td class="mono r neg">${fmt$(mdd_)}</td>
+          <td class="mono r pos">${fmt$(aw_)}</td>
+          <td class="mono r neg">${fmt$(al_)}</td>
+          <td class="mono r ${Number(aR)>0?'pos':'neg'}">${aR}R</td>
+        </tr>`;
+      }).join('');
+    return `<table style="width:100%">
+      <thead><tr>
+        <th>Mkt</th><th class="r">N</th><th class="r">Win%</th><th class="r">PF</th>
+        <th class="r">P&L</th><th class="r">MDD</th><th class="r">Avg W</th><th class="r">Avg L</th><th class="r">Avg R</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+  document.getElementById('sc-fhb-tbl').innerHTML = mktTable(fhbM);
+  document.getElementById('sc-orb-tbl').innerHTML = mktTable(orbM);
+
+  // ── Data window info ─────────────────────────────────────────────
+  document.getElementById('sc-window-info').innerHTML = [
+    { k:'Data Source',     v:'Sierra Charts (live futures export)' },
+    { k:'Markets',         v:(d.markets_tested||[]).join(', ') },
+    { k:'OOS Window',      v:'Nov 2025 – Mar 2026' },
+    { k:'Trading Days',    v:`${tdays} days (intraday)` },
+    { k:'Total Trades',    v:`${ac.total_trades||0} trades` },
+    { k:'FHB Trades',      v:`${fc.total_trades||0} across 5 markets` },
+    { k:'ORB Trades',      v:`${oc.total_trades||0} on NQ` },
+    { k:'Generated At',    v:ts },
+  ].map(({k,v})=>`<div class="kv-row"><span class="kv-key">${k}</span><span class="kv-val">${v}</span></div>`).join('');
 }
 
 // ─── Overview ────────────────────────────────────────────────────
