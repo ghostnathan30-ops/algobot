@@ -14,8 +14,9 @@
 *.secret
 secrets/
 credentials.json
-dashboard/config/auth.json    # JWT secret + password hash — never commit
-.tailscale_url                # cached Tailscale tunnel URL (local state, not a secret)
+dashboard/config/auth.json
+.tailscale_url
+data/account_state.json
 
 # ------------------------------------------------------------
 # PYTHON — Auto-generated files
