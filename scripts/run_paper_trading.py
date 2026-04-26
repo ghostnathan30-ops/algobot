@@ -2,10 +2,11 @@
 AlgoBot -- Paper Trading Loop
 ==============================
 Script:  scripts/run_paper_trading.py
-Phase:   6 -- Paper Trading
-Purpose: Run ORB + FHB signals live using IBKR paper account.
+Phase:   6 -- Paper Trading (IBKR TWS mode)
+Purpose: Run FHB + GC signals live using IBKR paper account.
          Generates signals with the same logic as backtests and submits
          bracket orders to TWS paper trading account.
+         NOTE: For TradingView webhook paper trading (no TWS), use run_tv_paper_trading.py instead.
 
 Prerequisites:
     1. TWS (paper) is open and API is enabled (port 7497)
@@ -75,15 +76,34 @@ ET  = pytz.timezone("America/New_York")
 
 MARKETS       = ["ES", "NQ"]    # Equity index markets
 GC_MARKETS    = ["GC"]          # Gold mean-reversion sub-bot
+CL_MARKETS    = ["CL"]          # Crude oil FHB sub-bot
 ORB_CHECK_H   = 9               # ORB check hour (ET)
 ORB_CHECK_M   = 45              # ORB check minute (ET)
 FHB_CHECK_H   = 10              # FHB + GC check hour (ET)
 FHB_CHECK_M   = 30              # FHB + GC check minute (ET)
+CL_CHECK_H    = 10              # CL check hour (ET) — after first-hour range closes
+CL_CHECK_M    = 31              # CL check minute (ET) — just after FHB window
 EOD_H         = 16              # End-of-day hour (ET)
 LOOP_SLEEP_S  = 20              # Main loop sleep interval (seconds)
 START_H       = 9               # Do not start signal checks before this hour
 POSITION_SYNC_EVERY = 15        # Sync open positions to dashboard every N loops
 RECONNECT_ATTEMPTS  = 3         # Number of reconnect tries on disconnect
+
+# ── NYSE Holidays 2026 ────────────────────────────────────────────────────────
+# Futures markets close early or fully on these dates.
+# Source: CME Group / NYSE holiday calendar for 2026.
+_NYSE_HOLIDAYS_2026: set = {
+    date(2026, 1,  1),   # New Year's Day
+    date(2026, 1, 19),   # MLK Day
+    date(2026, 2, 16),   # Presidents' Day
+    date(2026, 4,  3),   # Good Friday
+    date(2026, 5, 25),   # Memorial Day
+    date(2026, 6, 19),   # Juneteenth
+    date(2026, 7,  3),   # Independence Day (observed)
+    date(2026, 9,  7),   # Labor Day
+    date(2026, 11, 26),  # Thanksgiving
+    date(2026, 12, 25),  # Christmas
+}
 
 
 # ============================================================
@@ -101,8 +121,13 @@ def now_et() -> datetime:
 
 
 def is_trading_day() -> bool:
-    """Return True if today is Monday-Friday (basic check)."""
-    return now_et().weekday() < 5
+    """Return True if today is a US futures trading day (Mon-Fri, not NYSE holiday)."""
+    today = now_et().date()
+    if today.weekday() >= 5:
+        return False
+    if today in _NYSE_HOLIDAYS_2026:
+        return False
+    return True
 
 
 def time_passed(h: int, m: int, now: datetime) -> bool:
@@ -175,16 +200,21 @@ class DailyPnLTracker:
         # Alert threshold (warning only)
         if not self._alerted and self.pnl_today <= -self.alert_usd:
             self._alerted = True
-            print(f"\n  *** DAILY LOSS ALERT ***")
-            print(f"  Day P&L: ${self.pnl_today:,.0f}  |  Alert level: -${self.alert_usd:,.0f}")
-            print(f"  Trading continues but be cautious.")
+            print(f"\n\a  {'!'*55}")
+            print(f"  !! DAILY LOSS ALERT  —  ${self.pnl_today:+,.0f}")
+            print(f"  Alert level: -${self.alert_usd:,.0f}  |  "
+                  f"Remaining before stop: ${abs(self.hard_stop_usd - abs(self.pnl_today)):,.0f}")
+            print(f"  Trading continues. Tighten risk — no new positions unless A+ setup.")
+            print(f"  {'!'*55}")
 
         # Hard stop threshold
         if not self._halted and self.pnl_today <= -self.hard_stop_usd:
             self._halted = True
-            print(f"\n  *** DAILY HARD STOP TRIGGERED ***")
-            print(f"  Day P&L: ${self.pnl_today:,.0f} <= -${self.hard_stop_usd:,.0f}")
-            print(f"  Cancelling all orders. No more signals will be sent today.")
+            print(f"\n\a  {'#'*55}")
+            print(f"  ## DAILY HARD STOP TRIGGERED  —  ${self.pnl_today:+,.0f}")
+            print(f"  TopStep $50k daily limit: -$1,000  |  Our stop: -${self.hard_stop_usd:,.0f}")
+            print(f"  CANCELLING ALL ORDERS. No new signals will fire today.")
+            print(f"  {'#'*55}")
             if self._halt_cb is not None:
                 try:
                     self._halt_cb()
@@ -217,6 +247,7 @@ class DailyState:
         self.orb_done    = False    # ORB check fired for today
         self.fhb_done    = False    # FHB check fired for today
         self.gc_done     = False    # GC check fired for today
+        self.cl_done     = False    # CL check fired for today
         self.signals_sent: list[dict] = []
         self.signal_ids:   list[str]  = []
         self._tracker.reset()
@@ -290,11 +321,16 @@ def main():
 
     # ── Step 1: Init filters ─────────────────────────────────────────────────
     print("\n[1/4] Initialising filters...")
-    econ_cal   = EconCalendar()
-    vix_filter = VIXFilter.from_yahoo(
-        start="2023-01-01",
-        end=now_et().strftime("%Y-%m-%d"),
-    )
+    econ_cal = EconCalendar()
+    try:
+        vix_filter = VIXFilter.from_yahoo(
+            start="2023-01-01",
+            end=now_et().strftime("%Y-%m-%d"),
+        )
+        print("  VIXFilter: loaded from Yahoo Finance")
+    except Exception as e:
+        log.warning("VIXFilter: Yahoo download failed ({e}) -- using last-known OPTIMAL regime", e=e)
+        vix_filter = None   # LiveSignalEngine treats None as disabled; get_regime returns OPTIMAL
     gls_engine = GreenLightScore(
         full_size_threshold=FHB_GLS_HALF_SCORE,
         half_size_threshold=FHB_GLS_MIN_SCORE,
@@ -320,6 +356,20 @@ def main():
     account_value = bridge.get_account_value()
     print(f"  Connected: account={bridge._ib.managedAccounts()} | balance=${account_value:,.0f}")
 
+    # ── Contract roll warning ────────────────────────────────────────────────
+    from src.execution.ibkr_bridge import CONTRACT_EXPIRY
+    _today_str = now_et().strftime("%Y%m")
+    for _sym, _exp in CONTRACT_EXPIRY.items():
+        try:
+            _exp_year = int(_exp[:4])
+            _exp_mon  = int(_exp[4:6])
+            _months_away = (_exp_year - now_et().year) * 12 + (_exp_mon - now_et().month)
+            if _months_away <= 1:
+                print(f"\n  *** CONTRACT ROLL WARNING: {_sym} expires {_exp} "
+                      f"(~{_months_away} month(s) away). Update CONTRACT_EXPIRY! ***")
+        except Exception:
+            pass
+
     tracker.register_halt_callback(bridge.cancel_all)
     bridge.register_fill_callback(tracker.on_fill)
 
@@ -339,11 +389,30 @@ def main():
         gls_engine = gls_engine,
     )
     _eng_holder.append(engine)
-    all_markets = MARKETS + GC_MARKETS
+    all_markets = MARKETS + GC_MARKETS + CL_MARKETS
     engine.load_htf(all_markets)
     for m in all_markets:
         bias = engine._htf_today(m)
         print(f"  {m}: HTF bias = {bias}")
+
+    # ── Pre-market data validation ────────────────────────────────────────────
+    print("\n  Pre-market data feed check...")
+    from src.execution.live_signal_engine import _request_bars
+    _feed_ok: list[str] = []
+    _feed_fail: list[str] = []
+    for _m in MARKETS + GC_MARKETS + CL_MARKETS:
+        try:
+            _test_df = _request_bars(bridge._ib, _m, "1 hour", "1 D")
+            if not _test_df.empty:
+                _feed_ok.append(_m)
+            else:
+                _feed_fail.append(_m)
+        except Exception:
+            _feed_fail.append(_m)
+    if _feed_ok:
+        print(f"  Data OK  : {', '.join(_feed_ok)}")
+    if _feed_fail:
+        print(f"  *** DATA FEED FAIL: {', '.join(_feed_fail)} -- check IBKR market data subscriptions ***")
 
     # ── Mark bot as running in dashboard ─────────────────────────────────────
     try:
@@ -356,6 +425,7 @@ def main():
     print(f"  ORB  check at {ORB_CHECK_H:02d}:{ORB_CHECK_M:02d} ET  (ES, NQ)")
     print(f"  FHB  check at {FHB_CHECK_H:02d}:{FHB_CHECK_M:02d} ET  (ES, NQ)")
     print(f"  GC   check at {FHB_CHECK_H:02d}:{FHB_CHECK_M:02d} ET  (Gold mean-reversion)")
+    print(f"  CL   check at {CL_CHECK_H:02d}:{CL_CHECK_M:02d} ET  (Crude Oil Spring+Break)")
     print(f"  EOD  at {EOD_H:02d}:00 ET")
 
     state     = DailyState(tracker)
@@ -369,6 +439,9 @@ def main():
         state.fhb_done = True
         state.gc_done  = True
         print("  NOTE: Started after FHB/GC window -- FHB + GC skipped for today")
+    if time_passed(CL_CHECK_H, CL_CHECK_M + 15, now):
+        state.cl_done = True
+        print("  NOTE: Started after CL window -- CL skipped for today")
 
     try:
         while True:
@@ -445,6 +518,20 @@ def main():
                     else:
                         print("  GC: No signal today")
 
+            # ── CL check at 10:31 ────────────────────────────────────────────
+            if (not state.cl_done and
+                    time_window(CL_CHECK_H, CL_CHECK_M, 10, now)):
+                state.cl_done = True
+                if tracker.is_halted:
+                    print(f"\n[{now.strftime('%H:%M')}] CL skipped -- daily hard stop active")
+                else:
+                    print(f"\n[{now.strftime('%H:%M')}] CL check (Crude Oil Spring+Break)...")
+                    signal = engine.check_cl()
+                    if signal:
+                        _handle_signal(signal, bridge, state, account_value)
+                    else:
+                        print("  CL: No signal today")
+
             # ── Position sync to dashboard (every N loops) ──────────────────
             if loop_tick % POSITION_SYNC_EVERY == 0:
                 try:
@@ -496,25 +583,36 @@ def _handle_signal(
     sz = signal.get("size_mult", 1.0)
 
     risk_pts   = abs(e - s)
-    point_val  = {"ES": 50.0, "NQ": 20.0, "GC": 100.0}.get(m, 50.0)
+    point_val  = {
+        "ES": 50.0, "NQ": 20.0, "GC": 100.0, "CL": 1000.0,
+        "MES": 5.0, "MNQ": 2.0, "MGC": 10.0, "MCL": 100.0,
+    }.get(m, 50.0)
     risk_usd   = risk_pts * point_val
+    reward_usd = abs(t - e) * point_val
     risk_pct   = risk_usd / account_value * 100 if account_value > 0 else 0
+    rr         = reward_usd / risk_usd if risk_usd > 0 else 0
+    arrow      = "▲" if d == "LONG" else "▼"
+    now_str    = now_et().strftime("%H:%M:%S")
 
-    print(f"\n  *** {st} SIGNAL: {m} {d} ***")
-    print(f"  Entry:   {e}")
-    print(f"  Stop:    {s}")
-    print(f"  Target:  {t}")
-    print(f"  Size:    {sz:.0%} | Risk: ${risk_usd:,.0f} ({risk_pct:.1f}%)")
-    print(f"  GLS:     {signal.get('gls_score', 'N/A')} | "
-          f"OF: {signal.get('of_score', 'N/A')}")
+    print(f"\n\a  {'─'*55}")
+    print(f"  {arrow} {st} SIGNAL  |  {m}  {d}  |  {now_str} ET")
+    print(f"  {'─'*55}")
+    print(f"  Entry    {e:>12}    Risk    ${risk_usd:>8,.0f}  ({risk_pct:.1f}%)")
+    print(f"  Stop     {s:>12}    Reward  ${reward_usd:>8,.0f}  (R:R {rr:.1f})")
+    print(f"  Target   {t:>12}    Size    {sz:.0%}")
+    print(f"  GLS: {signal.get('gls_score','N/A')}  |  "
+          f"OF: {signal.get('of_score','N/A')}  |  "
+          f"Mode: {signal.get('risk_mode','—')}")
+    print(f"  {'─'*55}")
 
     signal_id = bridge.submit_signal(signal)
     if signal_id:
         state.signals_sent.append(signal)
         state.signal_ids.append(signal_id)
-        print(f"  ORDER SUBMITTED: id={signal_id}")
+        print(f"  ORDER SUBMITTED  id={signal_id}")
     else:
-        print(f"  WARNING: Order submission failed")
+        print(f"  *** WARNING: Order submission FAILED ***")
+    print()
 
 
 # ============================================================
@@ -526,13 +624,19 @@ def _print_daily_summary(
     bridge: IBKRBridge,
     db:     TradeDB,
 ) -> None:
-    print("\n" + "=" * 65)
-    print(f"  DAILY SUMMARY -- {state.date}")
-    print("=" * 65)
-    print(f"  Signals sent today: {len(state.signals_sent)}")
+    W = 65
+    print("\n" + "=" * W)
+    print(f"  DAILY SUMMARY  —  {state.date}")
+    print("=" * W)
+
+    # Signals fired today
+    print(f"\n  Signals fired: {len(state.signals_sent)}")
     for sig in state.signals_sent:
-        print(f"    {sig['strategy']} {sig['market']} {sig['direction']} "
-              f"E={sig['entry']} S={sig['stop']} T={sig['target']}")
+        pv  = {"ES":50,"NQ":20,"GC":100,"CL":1000,"MES":5,"MNQ":2,"MGC":10,"MCL":100}.get(sig["market"],50)
+        risk_usd = abs(sig["entry"] - sig["stop"]) * pv
+        print(f"    {sig['strategy']:8} {sig['market']:4} {sig['direction']:5}"
+              f"  E={sig['entry']}  S={sig['stop']}  T={sig['target']}"
+              f"  risk=${risk_usd:,.0f}")
 
     # Pull today's closed trades from TradeDB
     try:
@@ -540,13 +644,41 @@ def _print_daily_summary(
         if summary:
             row = summary[0]
             if str(row.get("trade_date", "")) == str(state.date):
-                print(f"\n  Closed trades: {row.get('wins', 0) + row.get('losses', 0)}")
-                print(f"  Wins / Losses: {row.get('wins', 0)} / {row.get('losses', 0)}")
-                print(f"  Net P&L:       ${row.get('pnl_net', 0):,.2f}")
+                wins   = row.get("wins",    0)
+                losses = row.get("losses",  0)
+                total  = wins + losses
+                pnl    = float(row.get("pnl_net", 0))
+                wr     = wins / total * 100 if total > 0 else 0
+                print(f"\n  {'─'*50}")
+                print(f"  Closed trades  : {total}  ({wins}W / {losses}L)")
+                print(f"  Win rate       : {wr:.0f}%")
+                print(f"  Net P&L        : ${pnl:+,.2f}")
+                print(f"  {'─'*50}")
     except Exception:
         pass
 
-    print("=" * 65 + "\n")
+    # P&L tracker summary
+    tracker = state._tracker
+    print(f"\n  P&L tracker    : ${tracker.pnl_today:+,.0f}")
+    print(f"  Alert level    : -${tracker.alert_usd:,.0f}"
+          f"  {'[TRIGGERED]' if tracker._alerted else '[OK]'}")
+    print(f"  Hard stop level: -${tracker.hard_stop_usd:,.0f}"
+          f"  {'[TRIGGERED]' if tracker.is_halted else '[OK]'}")
+
+    # Open positions at EOD
+    try:
+        positions = bridge.get_open_positions()
+        if positions:
+            print(f"\n  Open positions at EOD ({len(positions)}):")
+            for pos in positions:
+                print(f"    {pos.get('market','?')} {pos.get('direction','?')} "
+                      f"x{pos.get('size',1)}  entry={pos.get('entry_price','?')}")
+        else:
+            print(f"\n  No open positions at EOD")
+    except Exception:
+        pass
+
+    print("\n" + "=" * W + "\n")
 
 
 if __name__ == "__main__":

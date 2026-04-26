@@ -1,0 +1,141 @@
+//@version=6
+// AlgoBot — VWAP Mean Reversion Strategy  v1
+// Chart: NQ1!, ES1!, MGC1!, or MCL1! — 30m timeframe
+// Logic:
+//   1. Price extends beyond ±2SD from VWAP (statistically extreme deviation)
+//   2. RSI(5) confirms oversold (<25) for long or overbought (>75) for short
+//   3. ADX(14) < 25 — non-trending environment (mean reversion valid)
+//   4. Entry: bar close. Stop: beyond ±3SD. Target: VWAP midline.
+//   5. Signal window: 10:00–14:30 ET
+//   6. Flat before 16:00 ET
+strategy("AlgoBot VWAP Mean Reversion Strategy v1", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+webhook_secret    = input.string("CHANGE_ME_RANDOM_SECRET_HERE", "Webhook Secret")
+market            = input.string("NQ", "Market", options=["NQ","MNQ","ES","MES","MGC","MCL"])
+risk_mode         = input.string("safe", "Risk Mode", options=["safe","medium","hardcore"])
+max_cts           = input.int(1, "Max Contracts", minval=1, maxval=5)
+size_mult         = input.float(1.0, "Size Multiplier", minval=0.1, maxval=3.0, step=0.1)
+rsi_long_thresh   = input.int(25,  "RSI Long Threshold (oversold)",   minval=10, maxval=35, step=1)
+rsi_short_thresh  = input.int(75,  "RSI Short Threshold (overbought)", minval=65, maxval=90, step=1)
+max_adx           = input.float(25.0, "Max ADX (non-trending)", minval=15, maxval=35, step=1)
+sd_entry          = input.float(2.0, "Entry SD Level", minval=1.5, maxval=3.0, step=0.25)
+sd_stop           = input.float(3.0, "Stop SD Level",  minval=2.5, maxval=4.0, step=0.25)
+gls_score         = input.int(70, "GLS Score", minval=0, maxval=100)
+
+// ── Session windows (timezone-safe — works on all timeframes) ─────────────────
+is_signal_bar = not na(time(timeframe.period, "1000-1430", "America/New_York"))
+is_flat_bar   = not na(time(timeframe.period, "1559-1600", "America/New_York"))
+
+// ── Daily state reset ─────────────────────────────────────────────────────────
+var bool fired_long  = false
+var bool fired_short = false
+
+if dayofweek != dayofweek[1]
+    fired_long  := false
+    fired_short := false
+
+// ── Daily anchored VWAP — resets each session ─────────────────────────────────
+var float cum_tpv  = 0.0
+var float cum_vol  = 0.0
+var float cum_tp2v = 0.0
+
+if dayofweek != dayofweek[1]
+    cum_tpv  := 0.0
+    cum_vol  := 0.0
+    cum_tp2v := 0.0
+
+tp        = (high + low + close) / 3.0
+cum_tpv  += tp * volume
+cum_vol  += volume
+vwap      = cum_vol > 0 ? cum_tpv / cum_vol : na
+
+// ── Volume-weighted SD bands (proper formula) ─────────────────────────────────
+cum_tp2v += tp * tp * volume
+vwap_var  = cum_vol > 0 ? (cum_tp2v / cum_vol) - vwap * vwap : 0.0
+vwap_sd   = math.sqrt(math.max(vwap_var, 0.0))
+
+// Dynamic entry and stop bands driven by inputs
+entry_sd_up = vwap + sd_entry * vwap_sd
+entry_sd_dn = vwap - sd_entry * vwap_sd
+stop_sd_up  = vwap + sd_stop  * vwap_sd
+stop_sd_dn  = vwap - sd_stop  * vwap_sd
+
+// Fixed reference bands for plotting
+sd1_up = vwap + vwap_sd
+sd1_dn = vwap - vwap_sd
+sd2_up = vwap + 2 * vwap_sd
+sd2_dn = vwap - 2 * vwap_sd
+sd3_up = vwap + 3 * vwap_sd
+sd3_dn = vwap - 3 * vwap_sd
+
+// ── Indicators ────────────────────────────────────────────────────────────────
+rsi5 = ta.rsi(close, 5)
+[dmi_plus, dmi_minus, adx14] = ta.dmi(14, 14)
+
+// ── HTF bias for JSON ─────────────────────────────────────────────────────────
+htf_bull = close > ta.ema(close, 50)
+htf_bias = htf_bull ? "BULL" : "BEAR"
+
+// ── Signals ───────────────────────────────────────────────────────────────────
+// Long: price below entry SD lower + RSI oversold + non-trending (ADX < max)
+mr_long  = is_signal_bar and barstate.isconfirmed
+         and not na(vwap)
+         and close < entry_sd_dn
+         and rsi5 < rsi_long_thresh
+         and adx14 < max_adx
+         and not fired_long
+
+// Short: price above entry SD upper + RSI overbought + non-trending
+mr_short = is_signal_bar and barstate.isconfirmed
+         and not na(vwap)
+         and close > entry_sd_up
+         and rsi5 > rsi_short_thresh
+         and adx14 < max_adx
+         and not fired_short
+
+// ── Entry / stop / target ─────────────────────────────────────────────────────
+// Long: entry at close, stop at SD-stop lower, target = VWAP midline
+mr_long_entry  = close
+mr_long_stop   = stop_sd_dn
+mr_long_target = vwap
+
+// Short: entry at close, stop at SD-stop upper, target = VWAP midline
+mr_short_entry  = close
+mr_short_stop   = stop_sd_up
+mr_short_target = vwap
+
+// ── Alerts + strategy entries ─────────────────────────────────────────────────
+if mr_long
+    fired_long := true
+    strategy.entry("VWAP MR Long", strategy.long, qty=max_cts)
+    strategy.exit("VWAP MR Long Exit", "VWAP MR Long", limit=mr_long_target, stop=mr_long_stop)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"VWAP_MR","direction":"LONG","entry":' + str.tostring(math.round(mr_long_entry, 2)) + ',"stop":' + str.tostring(math.round(mr_long_stop, 2)) + ',"target":' + str.tostring(math.round(mr_long_target, 2)) + ',"rsi":' + str.tostring(math.round(rsi5, 1)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+if mr_short
+    fired_short := true
+    strategy.entry("VWAP MR Short", strategy.short, qty=max_cts)
+    strategy.exit("VWAP MR Short Exit", "VWAP MR Short", limit=mr_short_target, stop=mr_short_stop)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"VWAP_MR","direction":"SHORT","entry":' + str.tostring(math.round(mr_short_entry, 2)) + ',"stop":' + str.tostring(math.round(mr_short_stop, 2)) + ',"target":' + str.tostring(math.round(mr_short_target, 2)) + ',"rsi":' + str.tostring(math.round(rsi5, 1)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+// ── Flat before close ─────────────────────────────────────────────────────────
+if is_flat_bar and strategy.position_size != 0
+    strategy.close_all(comment="EOD Flat")
+
+// ── Visuals ───────────────────────────────────────────────────────────────────
+plot(vwap,   "VWAP",       color=color.blue,                        linewidth=2)
+plot(sd1_up, "SD1 Upper",  color=color.new(color.blue, 60),         linewidth=1)
+plot(sd1_dn, "SD1 Lower",  color=color.new(color.blue, 60),         linewidth=1)
+plot(sd2_up, "SD2 Upper",  color=color.new(color.red,  60),         linewidth=1)
+plot(sd2_dn, "SD2 Lower",  color=color.new(color.red,  60),         linewidth=1)
+plot(sd3_up, "SD3 Upper",  color=color.new(color.red,  20),         linewidth=1)
+plot(sd3_dn, "SD3 Lower",  color=color.new(color.red,  20),         linewidth=1)
+
+plotshape(mr_long,  title="VWAP MR LONG",  location=location.belowbar, color=color.green, style=shape.triangleup,   size=size.small)
+plotshape(mr_short, title="VWAP MR SHORT", location=location.abovebar, color=color.red,   style=shape.triangledown, size=size.small)
+
+// Orange background when price is in extreme zone (beyond ±2SD) — reversion setup territory
+extreme_zone = not na(vwap) and (close > sd2_up or close < sd2_dn)
+bgcolor(extreme_zone ? color.new(color.orange, 90) : na, title="Extreme SD Zone")

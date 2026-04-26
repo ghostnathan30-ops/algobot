@@ -1,0 +1,85 @@
+//@version=6
+// AlgoBot — CL Crude Oil First-Hour Breakout Strategy  v2
+// ⚠ DISABLED — Net loser across all tested parameter sets. EIA Wednesdays cause
+//    severe disruption. Do not use for live trading. Archived for reference only.
+//
+// Chart: CL1! or MCL — 15m or 30m timeframe
+// Range = first 60 min of RTH (9:30–10:30 ET)
+// Entry window: 10:30–13:00 ET
+// Skips Wednesday 10:00–11:30 ET (EIA report window)
+// HTF filter: long only above EMA(50), short only below EMA(50)
+strategy("AlgoBot CL Crude Oil Strategy v2", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+webhook_secret = input.string("CHANGE_ME_RANDOM_SECRET_HERE", "Webhook Secret")
+market         = input.string("CL", "Market", options=["CL","MCL"])
+risk_mode      = input.string("safe", "Risk Mode", options=["safe","medium","hardcore"])
+max_cts        = input.int(1, "Max Contracts", minval=1, maxval=5)
+size_mult      = input.float(1.0, "Size Multiplier", minval=0.1, maxval=3.0, step=0.1)
+stop_atr_mult  = input.float(1.2, "Stop ATR Mult", minval=0.5, maxval=3.0, step=0.1)
+target_r       = input.float(1.0, "Target R", minval=0.5, maxval=3.0, step=0.25)
+gls_score      = input.int(80, "GLS Score", minval=0, maxval=100)
+
+// ── Session windows (timezone-safe — works on all timeframes) ─────────────────
+is_range_bar   = not na(time(timeframe.period, "0930-1030", "America/New_York"))
+is_signal_bar  = not na(time(timeframe.period, "1030-1300", "America/New_York"))  // extended 10:30–13:00 ET
+
+// ── EIA blackout: Wednesday 10:00–11:30 ET ────────────────────────────────────
+is_eia_window  = dayofweek == dayofweek.wednesday and not na(time(timeframe.period, "1000-1130", "America/New_York"))
+
+// ── Range capture ─────────────────────────────────────────────────────────────
+var float cl_high     = na
+var float cl_low      = na
+var bool  fired_long  = false
+var bool  fired_short = false
+
+if dayofweek != dayofweek[1]
+    cl_high      := na
+    cl_low       := na
+    fired_long   := false
+    fired_short  := false
+
+if is_range_bar
+    cl_high := na(cl_high) ? high : math.max(cl_high, high)
+    cl_low  := na(cl_low)  ? low  : math.min(cl_low,  low)
+
+// ── ATR / HTF ─────────────────────────────────────────────────────────────────
+atr14    = ta.atr(14)
+htf_bull = close > ta.ema(close, 50)   // long trades: price above EMA50
+htf_bear = close < ta.ema(close, 50)   // short trades: price below EMA50
+htf_bias = htf_bull ? "BULL" : "BEAR"
+
+// ── Entry / stop / target ─────────────────────────────────────────────────────
+long_entry   = close
+long_stop    = long_entry  - atr14 * stop_atr_mult
+long_target  = long_entry  + (long_entry - long_stop) * target_r
+
+short_entry  = close
+short_stop   = short_entry + atr14 * stop_atr_mult
+short_target = short_entry - (short_stop - short_entry) * target_r
+
+// ── Signals (first signal bar after range, skip EIA window, aligned with HTF) ─
+range_ready   = not na(cl_high) and not na(cl_low)
+long_signal   = is_signal_bar and barstate.isconfirmed and range_ready and close > cl_high and htf_bull  and not fired_long  and not is_eia_window
+short_signal  = is_signal_bar and barstate.isconfirmed and range_ready and close < cl_low  and htf_bear  and not fired_short and not is_eia_window
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+if long_signal
+    fired_long := true
+    strategy.entry("CL Long", strategy.long)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"CL","direction":"LONG","entry":' + str.tostring(math.round(long_entry, 2)) + ',"stop":' + str.tostring(math.round(long_stop, 2)) + ',"target":' + str.tostring(math.round(long_target, 2)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+if short_signal
+    fired_short := true
+    strategy.entry("CL Short", strategy.short)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"CL","direction":"SHORT","entry":' + str.tostring(math.round(short_entry, 2)) + ',"stop":' + str.tostring(math.round(short_stop, 2)) + ',"target":' + str.tostring(math.round(short_target, 2)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+// ── Visuals ───────────────────────────────────────────────────────────────────
+bgcolor(is_eia_window ? color.new(color.orange, 90) : na,                                              title="EIA Blackout")
+bgcolor(htf_bull      ? color.new(color.green,  97) : color.new(color.red, 97),                       title="HTF Bias")
+plot(cl_high, "CL High", color=color.new(color.green, 50), linewidth=1, style=plot.style_stepline)
+plot(cl_low,  "CL Low",  color=color.new(color.red,   50), linewidth=1, style=plot.style_stepline)
+plotshape(long_signal,  title="CL LONG",  location=location.belowbar, color=color.green, style=shape.triangleup,   size=size.small)
+plotshape(short_signal, title="CL SHORT", location=location.abovebar, color=color.red,   style=shape.triangledown, size=size.small)

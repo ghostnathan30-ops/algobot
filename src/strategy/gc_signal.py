@@ -160,6 +160,7 @@ def compute_gc_signals(
     df["gc_stop"]           = float("nan")
     df["gc_target"]         = float("nan")
     df["gc_filter_reason"]  = ""
+    df["gc_gls_score"]      = 0
     df["gc_econ_impact"]    = "NONE"
     df["gc_vix_regime"]     = "OPTIMAL"
     df["gc_htf_bias"]       = _NEUTRAL
@@ -293,12 +294,48 @@ def compute_gc_signals(
                         day_df.loc[idx, "gc_filter_reason"]  = f"HTF={htf_bias} confirms UP breakout"
                         total_blocked += 1
                         continue
-                    # Stop: above the breakout high (extreme of up move)
-                    stop_level  = range_high + atr_stop_mult * atr_val if atr_val > 0 else range_high + entry_buffer
+                    # Entry approximation (actual entry = next bar open, but use close for sizing)
+                    _gc_entry_approx = float(bar["Close"])
+                    # Stop: above the breakout extreme AND above the entry bar close.
+                    # Bug guard: if a big-breakout bar closes far above range_high, the
+                    # range-anchored stop could be BELOW the close, putting it on the
+                    # wrong side for a SHORT (stop below entry = triggers on profit moves).
+                    # Fix: take the max so stop is always above both the range boundary
+                    # and the entry bar close.
+                    _atr_stop_dist = atr_stop_mult * atr_val if atr_val > 0 else entry_buffer
+                    stop_level = max(
+                        range_high + _atr_stop_dist,
+                        _gc_entry_approx + _atr_stop_dist,
+                    )
                     # Target: VWAP if available, else range midpoint
                     vwap_val    = float(bar.get("vwap", float("nan"))) if hasattr(bar, "get") else float("nan")
                     target_level = vwap_val if not np.isnan(vwap_val) else range_mid
+                    # R:R filter: skip if reward/risk < 0.75. If VWAP or range_mid is
+                    # too close to entry, the expected value doesn't justify the trade.
+                    # Economic basis: GC mean-reversion has mean R:R ≈ 0.8; trades with
+                    # R:R < 0.75 are below-average expected value and drag down PF.
+                    _gc_risk   = abs(_gc_entry_approx - stop_level)
+                    _gc_reward = abs(_gc_entry_approx - target_level)
+                    if _gc_risk > 0 and (_gc_reward / _gc_risk) < 0.75:
+                        day_df.loc[idx, "gc_filter_reason"] = (
+                            f"rr={_gc_reward/_gc_risk:.2f}<0.75 (reward={_gc_reward:.2f} risk={_gc_risk:.2f})"
+                        )
+                        total_blocked += 1
+                        continue
+
+                    # GLS score: composite fade quality
+                    # +10 if HTF is NEUTRAL (no trend to fight the fade)
+                    # +10 if the breakout bar has a rejection wick in the fade direction
+                    # +10 if breakout is well-extended from range boundary (>1.0×ATR)
+                    _gc_gls = 65
+                    if htf_bias == _NEUTRAL:            _gc_gls += 10
+                    bar_wick_up = float(bar["High"]) - float(bar["Close"])  # upper wick = SHORT rejection
+                    if atr_val > 0 and bar_wick_up >= 0.25 * atr_val:      _gc_gls += 10
+                    _gc_ext = abs(float(bar["Close"]) - range_high)
+                    if atr_val > 0 and _gc_ext >= 1.0 * atr_val:           _gc_gls += 10
+                    _gc_gls = min(_gc_gls, 95)
                     day_df.loc[idx, "gc_short_signal"] = True
+                    day_df.loc[idx, "gc_gls_score"]    = _gc_gls
                     total_short += 1
 
                 else:  # DOWN
@@ -312,12 +349,40 @@ def compute_gc_signals(
                         day_df.loc[idx, "gc_filter_reason"]  = f"HTF={htf_bias} confirms DOWN breakout"
                         total_blocked += 1
                         continue
-                    # Stop: below the breakout low (extreme of down move)
-                    stop_level  = range_low - atr_stop_mult * atr_val if atr_val > 0 else range_low - entry_buffer
+                    # Entry approximation
+                    _gc_entry_approx = float(bar["Close"])
+                    # Stop: below the breakout extreme AND below the entry bar close.
+                    # Mirror fix of the SHORT case: if a big-breakout bar closes far
+                    # below range_low, the range-anchored stop could be ABOVE the close,
+                    # putting it on the wrong side for a LONG.
+                    _atr_stop_dist = atr_stop_mult * atr_val if atr_val > 0 else entry_buffer
+                    stop_level = min(
+                        range_low - _atr_stop_dist,
+                        _gc_entry_approx - _atr_stop_dist,
+                    )
                     # Target: VWAP if available, else range midpoint
                     vwap_val    = float(bar.get("vwap", float("nan"))) if hasattr(bar, "get") else float("nan")
                     target_level = vwap_val if not np.isnan(vwap_val) else range_mid
+                    # R:R filter (same rationale as SHORT fade above)
+                    _gc_risk   = abs(_gc_entry_approx - stop_level)
+                    _gc_reward = abs(_gc_entry_approx - target_level)
+                    if _gc_risk > 0 and (_gc_reward / _gc_risk) < 0.75:
+                        day_df.loc[idx, "gc_filter_reason"] = (
+                            f"rr={_gc_reward/_gc_risk:.2f}<0.75 (reward={_gc_reward:.2f} risk={_gc_risk:.2f})"
+                        )
+                        total_blocked += 1
+                        continue
+
+                    # GLS score for LONG fade
+                    _gc_gls = 65
+                    if htf_bias == _NEUTRAL:            _gc_gls += 10
+                    bar_wick_down = float(bar["Close"]) - float(bar["Low"])  # lower wick = LONG rejection
+                    if atr_val > 0 and bar_wick_down >= 0.25 * atr_val:     _gc_gls += 10
+                    _gc_ext = abs(float(bar["Close"]) - range_low)
+                    if atr_val > 0 and _gc_ext >= 1.0 * atr_val:            _gc_gls += 10
+                    _gc_gls = min(_gc_gls, 95)
                     day_df.loc[idx, "gc_long_signal"] = True
+                    day_df.loc[idx, "gc_gls_score"]   = _gc_gls
                     total_long += 1
 
                 day_df.loc[idx, "gc_stop"]   = stop_level
@@ -515,7 +580,7 @@ def simulate_gc_trades(
             "pnl_net":      round(pnl_net, 2),
             "risk_pts":     round(risk_pts, 4),
             "partial_taken": partial_taken,
-            "gls_score":    0,
+            "gls_score":    int(row.get("gc_gls_score", 0)),
             "of_score":     0,
         }
         trades.append(trade)

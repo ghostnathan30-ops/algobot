@@ -136,6 +136,17 @@ FHB_RTY_TREND_ONLY = True   # Skip RTY trades when regime=RANGING
 FHB_NQ_BULL_BOOST = True    # Enable NQ conviction scaling
 FHB_NQ_BULL_MULT  = 1.5     # Multiplier (1.5x models trading 2 instead of 1 contract)
 
+# Phase 2A — Pullback entry (biggest single profitability upgrade)
+# After the signal bar closes above/below the range, wait for price to retrace
+# back to the range boundary before entering via a limit order.  Benefits:
+#   - Entry at proven S/R level (not chasing mid-air)
+#   - Stop placed just outside OPPOSITE range boundary — tight, structure-based
+#   - Risk = range_size + ATR buffer (well-defined, independent of breakout size)
+# Trades that never retrace within FHB_PULLBACK_MAX_BARS are skipped entirely.
+FHB_PULLBACK_ENTRY       = True   # Enable limit-order pullback entry
+FHB_PULLBACK_MAX_BARS    = 3      # Max 1H bars to wait for pullback fill; skip if not filled
+FHB_STRUCTURE_STOP_BUFF  = 0.10   # ATR fraction added as buffer beyond opposite range boundary
+
 
 # ============================================================
 # DATA LOADING
@@ -671,8 +682,6 @@ def simulate_fhb_trades(
             if htf_b == "BULL" and fast_b == "BULL":
                 size_mult = min(size_mult * FHB_NQ_BULL_MULT, FHB_NQ_BULL_MULT)
 
-        next_bar   = bars.iloc[i + 1]
-        entry_raw  = float(next_bar["Open"])
         range_high = float(row["fhb_range_high"])
         range_low  = float(row["fhb_range_low"])
         range_size = range_high - range_low
@@ -681,7 +690,39 @@ def simulate_fhb_trades(
         if range_size <= 0:
             continue
 
-        # ── Stop sizing ────────────────────────────────────────────────────────
+        # ── Entry: pullback limit order OR market open ─────────────────────────
+        fill_bar_j = 1   # bar offset from signal bar i where we get filled
+        if FHB_PULLBACK_ENTRY:
+            # Wait up to FHB_PULLBACK_MAX_BARS for price to retrace to range boundary.
+            # LONG: bar Low must touch range_high (price came back to test it).
+            # SHORT: bar High must touch range_low.
+            limit_px = range_high if is_long else range_low
+            filled   = False
+            for pb_j in range(1, FHB_PULLBACK_MAX_BARS + 1):
+                pb_idx = i + pb_j
+                if pb_idx >= len(bars):
+                    break
+                pb_bar = bars.iloc[pb_idx]
+                if is_long  and float(pb_bar["Low"])  <= limit_px:
+                    fill_bar_j = pb_j
+                    filled     = True
+                    break
+                elif not is_long and float(pb_bar["High"]) >= limit_px:
+                    fill_bar_j = pb_j
+                    filled     = True
+                    break
+            if not filled:
+                continue   # No pullback within window — strict discipline, skip trade
+
+            entry_raw = limit_px
+        else:
+            entry_raw = float(bars.iloc[i + 1]["Open"])
+
+        # ── Stop placement ─────────────────────────────────────────────────────
+        # Pullback entry: same ATR stop distance, but anchored to range_high/low
+        # (the pullback entry price) rather than the extended signal-bar close.
+        # This gives an identically-sized stop but starts from a BETTER entry,
+        # so the target (2.5R) is closer to current price → higher hit rate.
         if use_atr_stop and atr_val > 0:
             atr_stop_dist = min(
                 FHB_ATR_STOP_MULT * atr_val,
@@ -694,11 +735,13 @@ def simulate_fhb_trades(
         if is_long:
             entry        = entry_raw + slippage_pts
             stop_initial = entry - atr_stop_dist
-            stop_initial = max(stop_initial, range_low - slippage_pts)
+            if not FHB_PULLBACK_ENTRY:
+                stop_initial = max(stop_initial, range_low - slippage_pts)
         else:
             entry        = entry_raw - slippage_pts
             stop_initial = entry + atr_stop_dist
-            stop_initial = min(stop_initial, range_high + slippage_pts)
+            if not FHB_PULLBACK_ENTRY:
+                stop_initial = min(stop_initial, range_high + slippage_pts)
 
         risk_pts = abs(entry - stop_initial)
         if risk_pts <= 0:
@@ -734,7 +777,7 @@ def simulate_fhb_trades(
         max_bars = FHB_MAX_HOLD_BARS + (FHB_OVERNIGHT_MAX_BARS if overnight_carry else 0)
 
         for j in range(1, max_bars + 1):
-            bar_idx = i + 1 + j
+            bar_idx = i + fill_bar_j + j
             if bar_idx >= len(bars):
                 final_exit_price = float(bars.iloc[bar_idx - 1]["Close"])
                 exit_reason      = "eod"
@@ -825,7 +868,7 @@ def simulate_fhb_trades(
 
         # Fallback time exit
         if final_exit_price is None:
-            exit_bar_final = i + 1 + FHB_MAX_HOLD_BARS
+            exit_bar_final = i + fill_bar_j + FHB_MAX_HOLD_BARS
             if exit_bar_final < len(bars):
                 final_exit_price = float(bars.iloc[exit_bar_final]["Close"])
             else:

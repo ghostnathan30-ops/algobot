@@ -2,16 +2,17 @@
 AlgoBot -- Dashboard Data Generator
 =====================================
 Script:  scripts/generate_dashboard_data.py
-Purpose: Run full ORB + FHB + GC_REV + 6E_LON replay and export structured
+Purpose: Run full ORB + FHB + GC_REV + CL_FHB replay and export structured
          trade data to dashboard/cache/ as JSON for the performance dashboard.
 
 Steps:
-  [1/6] Load filters (EconCalendar, VIX, GLS)
-  [2/6] ORB signals (ES, NQ — 5-min bars)
-  [3/6] FHB signals (ES, NQ — 1-hour bars)
-  [4/6] GC Mean Reversion (Gold — 1-hour bars, inverted FHB)
-  [5/6] 6E London Open Breakout (Euro FX — 1-hour overnight bars)
-  [6/6] Aggregate, sort, save JSON
+  [1/7] Load filters (EconCalendar, VIX, GLS)
+  [2/7] ORB signals (ES, NQ — 5-min bars)
+  [3/7] FHB signals (ES, NQ — 1-hour bars)
+  [4/7] GC Mean Reversion (Gold — 1-hour bars)
+  [5/7] CL Crude Oil FHB (Spring + Decisive Break — 1-hour bars)
+  [6/7] 6E London Open: PARKED — no edge
+  [7/7] Aggregate, sort, save JSON
 
 Run once (takes ~90s), then start the dashboard server:
     conda run -n algobot_env python scripts/generate_dashboard_data.py
@@ -206,11 +207,57 @@ def main():
     except Exception as e:
         print(f"  GC: Error — {e}")
 
-    # ── 6E London Open — PARKED (PF=0.79, losing -$3,866, drags system PF) ──
-    print("[5/6] 6E London Open: PARKED — no edge in current EUR/USD ranging regime (skipping)")
+    # ── CL Crude Oil — load from latest backtest CSV ─────────────────────────
+    print("[5/7] Loading CL Crude Oil trades (Spring LONG + Decisive Break SHORT)...")
+    try:
+        cl_csv = PROJECT_ROOT / "reports" / "backtests" / "cl_fhb_trades.csv"
+        if cl_csv.exists():
+            import csv
+            with open(cl_csv, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                cl_count = 0
+                for row in reader:
+                    try:
+                        pnl = float(row.get("pnl_net", 0) or 0)
+                        entry = float(row.get("entry_price", row.get("entry", 0)) or 0)
+                        risk  = float(row.get("risk_pts", 0) or 0)
+                        dir_  = str(row.get("direction", "SHORT")).strip()
+                        stop  = round(entry - risk, 3) if dir_ == "LONG" else round(entry + risk, 3)
+                        tgt   = round(entry + risk, 3) if dir_ == "LONG" else round(entry - risk, 3)
+                        date_raw = str(row.get("date", "")).split("T")[0].split(" ")[0]
+                        if not date_raw or date_raw == "nan":
+                            continue
+                        all_trades.append({
+                            "date":        date_raw,
+                            "strategy":    "CL_FHB",
+                            "market":      str(row.get("market", "CL")).strip(),
+                            "direction":   dir_,
+                            "entry":       round(entry, 3),
+                            "stop":        stop,
+                            "target":      tgt,
+                            "exit":        float(row.get("exit_price", 0) or 0),
+                            "exit_reason": str(row.get("exit_reason", "")).strip(),
+                            "pnl_net":     round(pnl, 2),
+                            "risk_pts":    round(risk, 4),
+                            "range_h":     0.0,
+                            "range_l":     0.0,
+                            "gls_score":   int(float(row.get("gls_score", 0) or 0)),
+                            "of_score":    0,
+                        })
+                        cl_count += 1
+                    except Exception:
+                        continue
+            print(f"  CL_FHB: {cl_count} trades loaded from CSV")
+        else:
+            print("  CL: No CSV found — run scripts/run_cl_backtest.py first")
+    except Exception as e:
+        print(f"  CL: Error loading CSV — {e}")
+
+    # ── 6E London Open — PARKED ───────────────────────────────────────────────
+    print("[6/7] 6E London Open: PARKED — no edge in current EUR/USD ranging regime (skipping)")
 
     # ── Sort and slice to last DAYS ──────────────────────────────────────────
-    print("[6/6] Computing daily aggregates...")
+    print("[7/7] Computing daily aggregates...")
     all_trades.sort(key=lambda x: x["date"])
     unique_dates = sorted({t["date"] for t in all_trades})
     cutoff_dates = set(unique_dates[-DAYS:])

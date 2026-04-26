@@ -84,7 +84,7 @@ def _load_risk_mode_config() -> dict:
             mode  = state.get("risk_mode", "medium")
             # Inline fallback table (mirrors bot_state.RISK_MODES)
             modes = {
-                "safe":     {"max_contracts": 1, "daily_loss_cap_usd": 1500.0, "max_loss_per_trade_usd": 1000.0},
+                "safe":     {"max_contracts": 1, "daily_loss_cap_usd":  900.0, "max_loss_per_trade_usd":  400.0},
                 "medium":   {"max_contracts": 3, "daily_loss_cap_usd": 2500.0, "max_loss_per_trade_usd": 2000.0},
                 "hardcore": {"max_contracts": 5, "daily_loss_cap_usd": 3800.0, "max_loss_per_trade_usd": 3000.0},
             }
@@ -102,14 +102,20 @@ def _load_risk_mode_config() -> dict:
 # ============================================================
 
 CONTRACT_EXPIRY: dict[str, str] = {
-    "ES":  "202606",   # E-mini S&P 500   -- Jun 2026 (rolled from Mar on ~Mar 13 2026)
-    "NQ":  "202606",   # E-mini Nasdaq-100 -- Jun 2026
-    "GC":  "202606",   # Gold futures      -- Jun 2026 (Apr contract expired; next active is Jun)
-    "RTY": "202606",   # E-mini Russell 2000 -- Jun 2026
-    "YM":  "202606",   # E-mini Dow Jones  -- Jun 2026
-    "CL":  "202605",   # Crude Oil         -- May 2026 (monthly roll, ~Apr 20)
-    "ZB":  "202606",   # 30-yr Bond        -- Jun 2026 (quarterly)
-    "6E":  "202606",   # Euro FX           -- Jun 2026
+    # ── Full-size contracts ──────────────────────────────────────────────────
+    "ES":  "202606",   # E-mini S&P 500        -- Jun 2026 (rolled Mar 13 2026)
+    "NQ":  "202606",   # E-mini Nasdaq-100      -- Jun 2026
+    "GC":  "202606",   # Gold futures           -- Jun 2026
+    "RTY": "202606",   # E-mini Russell 2000    -- Jun 2026
+    "YM":  "202606",   # E-mini Dow Jones       -- Jun 2026
+    "CL":  "202605",   # Crude Oil              -- May 2026 (monthly, ~Apr 20 roll)
+    "ZB":  "202606",   # 30-yr Bond             -- Jun 2026
+    "6E":  "202606",   # Euro FX                -- Jun 2026
+    # ── Micro contracts (TopStep $50k — 1/10th the notional of full) ────────
+    "MES": "202606",   # Micro E-mini S&P 500   -- same roll as ES
+    "MNQ": "202606",   # Micro E-mini Nasdaq    -- same roll as NQ
+    "MGC": "202606",   # Micro Gold             -- same roll as GC
+    "MCL": "202605",   # Micro Crude Oil        -- same roll as CL
 }
 
 CONTRACT_EXCHANGE: dict[str, str] = {
@@ -121,6 +127,11 @@ CONTRACT_EXCHANGE: dict[str, str] = {
     "CL":  "NYMEX",
     "ZB":  "CBOT",
     "6E":  "CME",
+    # Micros
+    "MES": "CME",
+    "MNQ": "CME",
+    "MGC": "COMEX",
+    "MCL": "NYMEX",
 }
 
 CONTRACT_SYMBOL: dict[str, str] = {
@@ -132,6 +143,11 @@ CONTRACT_SYMBOL: dict[str, str] = {
     "CL":  "CL",
     "ZB":  "ZB",
     "6E":  "6E",
+    # Micros
+    "MES": "MES",
+    "MNQ": "MNQ",
+    "MGC": "MGC",
+    "MCL": "MCL",
 }
 
 # Base contract size (1 lot) -- Topstep limits apply on top of this
@@ -144,15 +160,21 @@ CONTRACT_SIZE: dict[str, int] = {
     "CL":  1,
     "ZB":  1,
     "6E":  1,
+    # Micros
+    "MES": 1,
+    "MNQ": 1,
+    "MGC": 1,
+    "MCL": 1,
 }
 
 # ── Priority 1A: Hard per-trade loss cap ──────────────────────────────────────
 # If the signal's ATR-based stop would risk more than this, the stop is
-# tightened at submission time.  Target: never let a single trade exceed
-# the Topstep $3,000/day limit, with a $1,000 safety buffer.
-MAX_LOSS_PER_TRADE_USD: float = 2_000.0
+# tightened at submission time.  TopStep $50k daily limit = $1,000.
+# We cap a single trade at $400 = 40% of the daily budget.
+MAX_LOSS_PER_TRADE_USD: float = 400.0
 
 POINT_VALUE: dict[str, float] = {
+    # Full-size
     "ES":  50.0,       # $50 per full index point
     "NQ":  20.0,       # $20 per full index point
     "GC":  100.0,      # $100 per troy-oz point
@@ -161,6 +183,11 @@ POINT_VALUE: dict[str, float] = {
     "CL":  1_000.0,    # $1,000 per dollar move
     "ZB":  1_000.0,    # $1,000 per full point
     "6E":  125_000.0,  # $125,000 per pip (contract face value)
+    # Micros (1/10th the full contract)
+    "MES": 5.0,        # $5 per full index point
+    "MNQ": 2.0,        # $2 per full index point
+    "MGC": 10.0,       # $10 per troy-oz point
+    "MCL": 100.0,      # $100 per dollar move
 }
 
 

@@ -1,8 +1,10 @@
 # LAB_013 — 6E London Open Breakout Sub-Bot
 
-**Date:** 2026-03-01
+**Date:** 2026-03-01 · Updated: 2026-03-27
 **Phase:** Sub-Bot B — 6E London Open Breakout
-**Status:** Implementation complete — backtest pending execution
+**Status:** PARKED — No edge confirmed
+
+> **PARKED.** All parameter configurations tested (PF range: 0.41–0.58). EUR/USD has been RANGING 43% of the test period (2023–2026) — no directional edge available in this regime. Will revisit when EUR re-enters a sustained trending regime or with 5+ years of IB historical data covering EUR trending periods (2017–2018, 2020). Do NOT trade this strategy.
 
 ---
 

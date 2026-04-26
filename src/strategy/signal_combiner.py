@@ -79,6 +79,10 @@ class SignalDirection(str, Enum):
     PB_SHORT     = "PB_SHORT"      # EMA pullback short — higher win-rate trend entry
     VMR_LONG     = "VMR_LONG"      # Mean reversion long (ES/NQ only)
     VMR_SHORT    = "VMR_SHORT"     # Mean reversion short — DISABLED in Phase 5
+    VWAP_PB_LONG  = "VWAP_PB_LONG"  # VWAP pullback long  (NQ/ES/MNQ/MES)
+    VWAP_PB_SHORT = "VWAP_PB_SHORT" # VWAP pullback short (NQ/ES/MNQ/MES)
+    VWAP_MR_LONG  = "VWAP_MR_LONG"  # VWAP ±2SD mean-reversion long
+    VWAP_MR_SHORT = "VWAP_MR_SHORT" # VWAP ±2SD mean-reversion short
     NO_TRADE     = "NO_TRADE"      # No valid signal this bar
 
 
@@ -103,11 +107,14 @@ class CombinedSignal:
 
     def __post_init__(self):
         self.is_trend          = self.direction in (
-            SignalDirection.AGREE_LONG, SignalDirection.AGREE_SHORT,
-            SignalDirection.PB_LONG,   SignalDirection.PB_SHORT,
+            SignalDirection.AGREE_LONG,   SignalDirection.AGREE_SHORT,
+            SignalDirection.PB_LONG,      SignalDirection.PB_SHORT,
+            SignalDirection.VWAP_PB_LONG, SignalDirection.VWAP_PB_SHORT,
         )
-        self.is_mean_reversion = self.direction in (SignalDirection.VMR_LONG,
-                                                    SignalDirection.VMR_SHORT)
+        self.is_mean_reversion = self.direction in (
+            SignalDirection.VMR_LONG,     SignalDirection.VMR_SHORT,
+            SignalDirection.VWAP_MR_LONG, SignalDirection.VWAP_MR_SHORT,
+        )
 
     def __str__(self) -> str:
         htf_str = " [HTF-BLOCKED]" if self.htf_blocked else ""

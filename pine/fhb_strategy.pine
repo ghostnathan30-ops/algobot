@@ -1,0 +1,89 @@
+//@version=6
+// AlgoBot — First Hour Breakout (FHB) Strategy v4 — LONG ONLY
+// Chart: NQ1! — 15m timeframe
+// Range = first 60 min of RTH (9:30–10:30 ET)
+// Signal = first bar after 10:30 that closes ABOVE the range AND aligns with HTF EMA(50)
+// Entry = market order at signal bar close (NOT limit/pullback)
+//
+// v4 changes from v3:
+//   - SHORT side DISABLED — TV backtest 2026-04-03: short PF=0.918 (net loser, 103 trades)
+//   - Market entry ONLY — pullback/limit entry disabled: reduces WR 63.5%→22.97%
+//   - Removed pullback_entry input entirely
+//   - Simplified short tracking vars (removed, not needed)
+//
+// TV Backtest results (2026-04-03, NQ1! 15m, commission+slippage):
+//   Long only, market entry: PF=1.73, WR=63.5%, 105 trades, Max DD=-$6,572
+//   Note: Full system PF=2.87 from Python backtest (different execution model)
+strategy("AlgoBot FHB Strategy v4 — Long Only", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+webhook_secret  = input.string("ZTf-p6zOJ9JW3MMlyNid8WCfEE8Hzvlfzbtk8T7n-6I", "Webhook Secret")
+market          = input.string("NQ", "Market", options=["NQ","MNQ"])
+risk_mode       = input.string("safe", "Risk Mode", options=["safe","medium","hardcore"])
+max_cts         = input.int(1, "Max Contracts", minval=1, maxval=5)
+size_mult       = input.float(1.0, "Size Multiplier", minval=0.1, maxval=3.0, step=0.1)
+stop_atr_mult   = input.float(0.8, "Stop ATR Mult", minval=0.3, maxval=2.0, step=0.1)
+target_r        = input.float(2.5, "Target R", minval=1.0, maxval=5.0, step=0.5)
+gls_score       = input.int(75, "GLS Score", minval=0, maxval=100)
+
+// ── Session windows (timezone-safe) ──────────────────────────────────────────
+is_range_bar  = not na(time(timeframe.period, "0930-1030", "America/New_York"))
+is_signal_bar = not na(time(timeframe.period, "1030-1200", "America/New_York"))
+
+// ── Range capture ─────────────────────────────────────────────────────────────
+var float fhb_high = na
+var float fhb_low  = na
+var bool  fired    = false
+
+// ── Breakeven stop tracking ────────────────────────────────────────────────────
+var float be_stop   = na
+var float entry_px  = na
+var float risk_px   = na
+
+if dayofweek != dayofweek[1]
+    fhb_high := na
+    fhb_low  := na
+    fired    := false
+
+if is_range_bar
+    fhb_high := na(fhb_high) ? high : math.max(fhb_high, high)
+    fhb_low  := na(fhb_low)  ? low  : math.min(fhb_low,  low)
+
+// ── ATR / HTF ─────────────────────────────────────────────────────────────────
+atr14    = ta.atr(14)
+htf_bull = close > ta.ema(close, 50)
+htf_bias = htf_bull ? "BULL" : "BEAR"
+
+// ── Entry / stop / target — market entry at bar close ─────────────────────────
+long_entry  = close
+long_risk   = atr14 * stop_atr_mult
+long_stop   = long_entry - long_risk
+long_target = long_entry + long_risk * target_r
+
+// ── Signal: breakout ABOVE range, HTF BULL only, LONG ONLY ────────────────────
+range_ready  = not na(fhb_high) and not na(fhb_low)
+long_signal  = is_signal_bar and barstate.isconfirmed and range_ready and close > fhb_high and not fired and htf_bull
+// short_signal = false  — SHORT disabled: PF=0.918 per TV backtest 2026-04-03
+
+// ── Entry order ───────────────────────────────────────────────────────────────
+if long_signal
+    fired   := true
+    entry_px := long_entry
+    risk_px  := long_risk
+    be_stop  := long_stop
+    strategy.entry("FHB Long", strategy.long, qty=max_cts)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"FHB","direction":"LONG","order_type":"market","entry":' + str.tostring(math.round(long_entry, 2)) + ',"stop":' + str.tostring(math.round(long_stop, 2)) + ',"target":' + str.tostring(math.round(long_target, 2)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+// ── Breakeven stop management ─────────────────────────────────────────────────
+// Once high reaches entry + 1R, slide stop to entry (breakeven)
+if strategy.position_size > 0 and not na(entry_px)
+    if be_stop < entry_px and high >= entry_px + risk_px
+        be_stop := entry_px
+    strategy.exit("FHB Long Exit", "FHB Long", stop=be_stop, limit=entry_px + risk_px * target_r)
+
+// ── Visuals ───────────────────────────────────────────────────────────────────
+plot(fhb_high, "FHB High", color=color.new(color.green, 50), linewidth=1, style=plot.style_stepline)
+plot(fhb_low,  "FHB Low",  color=color.new(color.red,   50), linewidth=1, style=plot.style_stepline)
+plotshape(long_signal, title="FHB LONG", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.small)
+bgcolor(htf_bull ? color.new(color.green, 97) : color.new(color.red, 97), title="HTF Bias")

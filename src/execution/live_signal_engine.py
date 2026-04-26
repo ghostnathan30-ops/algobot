@@ -105,15 +105,31 @@ def get_front_month_expiry() -> str:
 
 
 CONTRACT_EXCHANGE = {
-    "ES": "CME",
-    "NQ": "CME",
-    "GC": "COMEX",
+    # Full-size
+    "ES":  "CME",
+    "NQ":  "CME",
+    "GC":  "COMEX",
     "RTY": "CME",
+    "CL":  "NYMEX",
+    # Micro contracts (TopStep $50k)
+    "MES": "CME",
+    "MNQ": "CME",
+    "MGC": "COMEX",
+    "MCL": "NYMEX",
+}
+
+
+_CL_EXPIRY  = "202605"   # CL/MCL May 2026 -- update ~Apr 20 → 202606
+_EQ_EXPIRY  = "202606"   # ES/NQ/GC and micros Jun 2026
+
+_MARKET_EXPIRY: dict[str, str] = {
+    "CL":  _CL_EXPIRY,
+    "MCL": _CL_EXPIRY,
 }
 
 
 def make_contract(market: str) -> "Future":
-    expiry   = get_front_month_expiry()
+    expiry   = _MARKET_EXPIRY.get(market, _EQ_EXPIRY)
     exchange = CONTRACT_EXCHANGE.get(market, "CME")
     return Future(market, expiry, exchange)
 
@@ -749,4 +765,96 @@ class LiveSignalEngine:
             }
 
         log.info("GC: No signal today")
+        return None
+
+    # ── CL (Crude Oil) Spring + Decisive Break Signal ─────────────────────────
+
+    def check_cl(self) -> Optional[dict]:
+        """
+        Check for a CL (Crude Oil) signal. Call at 10:31 ET (after first-hour range).
+        Uses compute_cl_signals() — identical logic to the backtest (10/10 ROBUST).
+
+        LONG: "Spring" dip-and-recover at range_low on BULL fast_bias + BULL htf_bias.
+        SHORT: Decisive breakdown below range_low on BEAR fast_bias.
+
+        Returns signal dict or None.
+        """
+        if self._check_paused("CL"):
+            return None
+
+        df = _request_bars(self.ib, "CL", "1 hour", "5 D")
+        if df.empty:
+            log.warning("CL: no 1-hour bars from IBKR")
+            return None
+
+        from src.strategy.cl_signal import compute_cl_signals
+
+        htf_bias   = self._htf_bias.get("CL",      pd.Series(dtype=str))
+        htf_regime = self._htf_regime.get("CL",     pd.Series(dtype=str))
+        fast_bias  = self._htf_fast_bias.get("CL",  pd.Series(dtype=str))
+
+        df_sig = compute_cl_signals(
+            df, htf_bias, htf_regime, fast_bias, self.config,
+            econ_cal=self.econ_cal, vix_filter=self.vix_filter,
+        )
+
+        today_et = datetime.now(ET).date()
+        today_df = df_sig[df_sig.index.date == today_et]
+
+        for direction, col in [("LONG", "cl_long_signal"), ("SHORT", "cl_short_signal")]:
+            if col not in today_df.columns:
+                continue
+            rows = today_df[today_df[col] == True]
+            if rows.empty:
+                continue
+
+            row = rows.iloc[0]
+
+            # Read pre-computed entry/stop/target from signal dataframe
+            entry  = float(row.get("cl_entry",  0))
+            stop   = float(row.get("cl_stop",   0))
+            target = float(row.get("cl_target", 0))
+
+            # Fallback: compute from range if signal columns don't carry levels
+            if entry == 0:
+                from src.strategy.cl_signal import (
+                    CL_ATR_STOP_MULT, CL_TARGET_R, CL_ENTRY_BUF_TICKS, CL_TICK_SIZE,
+                )
+                range_high = float(row.get("cl_range_high", 0))
+                range_low  = float(row.get("cl_range_low",  0))
+                atr_val    = float(row.get("cl_atr", 0))
+                buf        = CL_ENTRY_BUF_TICKS * CL_TICK_SIZE
+                if direction == "LONG":
+                    entry  = round(range_low  - buf, 3)
+                    stop   = round(entry - CL_ATR_STOP_MULT * atr_val, 3)
+                else:
+                    entry  = round(range_low  - buf, 3)
+                    stop   = round(entry + CL_ATR_STOP_MULT * atr_val, 3)
+                risk   = abs(entry - stop)
+                target = round(entry + CL_TARGET_R * risk * (1 if direction == "LONG" else -1), 3)
+
+            risk = abs(entry - stop)
+            if risk <= 0 or entry == 0:
+                continue
+
+            gls_score = int(row.get("cl_gls_score", 80))
+            log.info(
+                "CL: {d} signal | entry={e} stop={s} target={t} GLS={g}",
+                d=direction, e=entry, s=stop, t=target, g=gls_score,
+            )
+            return {
+                "market":        "CL",
+                "strategy":      "CL_FHB",
+                "direction":     direction,
+                "entry":         entry,
+                "stop":          stop,
+                "target":        target,
+                "size_mult":     1.0,
+                "gls_score":     gls_score,
+                "of_score":      0,
+                "risk_mode":     self._risk_mode,
+                "max_contracts": self._max_contracts,
+            }
+
+        log.info("CL: No signal today")
         return None

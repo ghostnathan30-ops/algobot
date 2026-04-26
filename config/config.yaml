@@ -24,7 +24,7 @@
 # ------------------------------------------------------------
 project:
   name:     "AlgoBot"
-  version:  "2.0.0"
+  version:  "3.0.0"
   log_level: "INFO"       # DEBUG | INFO | WARNING | ERROR
 
 # ------------------------------------------------------------
@@ -173,6 +173,101 @@ strategy:
     enabled: true     # ALWAYS true in production. Only disable to
                       # test individual strategy performance in research.
 
+  # ----------------------------------------------------------
+  # STRATEGY 5: VWAP Trend Pullback (Mode A)
+  # Purpose: Enter in trend direction when price retests VWAP
+  # Markets: NQ, MNQ, ES, MES (equity index futures — high VWAP respect)
+  # Timeframe: 1H bars
+  # Win rate target: 55-65% (pullback entries near institutional benchmark)
+  # Signal: ≥3 bars above/below VWAP → price touches within 0.15% of VWAP
+  #         → bounce bar closes in trend direction → enter on next bar
+  # ----------------------------------------------------------
+  vwap_pullback:
+    enabled: true              # Enable VWAP pullback entries
+
+    touch_threshold_pct: 0.15  # How close to VWAP counts as a "touch" (%).
+                               # 0.15% of price. At NQ 20,000 → 30pt window.
+                               # Tighter = fewer but cleaner entries.
+
+    trend_bars_required: 3     # Minimum consecutive bars above/below VWAP
+                               # before a pullback entry is valid.
+                               # 3 bars = confirms trend is established,
+                               # not a random oscillation.
+
+    stop_atr_mult: 0.30        # Stop = bar_low − ATR × 0.30 (long).
+                               # Tight stop because entry is at precise VWAP.
+                               # Wider stops reduce R:R, not appropriate here.
+
+    target_r: 2.0              # Target = entry + 2.0 × risk.
+                               # 2R gives positive expectancy at 40%+ win rate.
+
+    partial_exit_r: 1.0        # Take 50% off at 1R to lock profits.
+                               # Remainder runs to 2R. Improves WR statistics.
+
+    max_hold_bars: 8           # Max bars to hold before forced exit.
+                               # VWAP trades typically resolve within 1 session.
+
+    signal_window_start: "1000"  # ET — allow signals only after 10:00
+    signal_window_end:   "1400"  # ET — no new entries after 14:00 (avoid close)
+
+  # ----------------------------------------------------------
+  # STRATEGY 6: VWAP Mean Reversion (Mode B)
+  # Purpose: Fade extreme deviations from VWAP using SD bands
+  # Markets: NQ, MNQ, ES, MES, GC, MGC, CL, MCL
+  # Timeframe: 1H bars
+  # Win rate target: 55-65% (price reverts to VWAP from extremes)
+  # Signal: Price beyond ±2SD + RSI5 extreme (<25 or >75) + ADX<25
+  # Entry: At close of ±2SD bar. Stop = ±3SD. Target = VWAP midline.
+  # ----------------------------------------------------------
+  vwap_reversion:
+    enabled: true              # Enable VWAP mean-reversion entries
+
+    sd_entry_threshold: 2.0    # Enter when price crosses this many SDs from VWAP.
+                               # ±2SD contains 95.4% of price action under normal
+                               # distribution. Beyond = statistically extreme.
+                               # Academic: Bollinger (1992), VWAP deviation studies.
+
+    sd_stop_threshold: 3.0     # Stop placed at ±3SD from VWAP.
+                               # ±3SD = 99.7% of normal distribution.
+                               # If price goes to 3SD, reversion thesis is broken.
+
+    rsi_long: 20               # RSI(5) below this → long entry (equity indices).
+                               # TIGHTENED 25→20 after 2026-04-04 backtest.
+                               # At RSI=25 we were catching marginal oversold readings;
+                               # at RSI=20 we only catch genuine extremes.
+                               # Effect: ~30% fewer signals, higher win rate.
+
+    rsi_short: 80              # RSI(5) above this → short entry (equity indices).
+                               # TIGHTENED 75→80 after 2026-04-04 backtest.
+
+    rsi_long_gold: 25          # RSI(5) threshold for GC/MGC long entry.
+                               # Gold is genuinely bidirectional — RSI 25/75 gives
+                               # more signals and better PF vs equities at 20/80.
+                               # Backtest: GC PF=2.37 at 25/75 vs 1.44 at 20/80.
+
+    rsi_short_gold: 75         # RSI(5) threshold for GC/MGC short entry.
+
+    max_adx: 20                # Equity ADX cap (NQ/MNQ/ES/MES).
+                               # TIGHTENED 25→20 after 2026-04-04 backtest.
+                               # ADX 20-25 = transitioning; too many false MR signals.
+                               # Below 20 = genuinely non-trending, MR works.
+
+    max_adx_gold: 25           # GC/MGC ADX cap — original value kept.
+                               # Gold's MR edge persists up to ADX=25.
+                               # At ADX<20: N drops 89→40 signals, PF falls 2.37→1.34.
+
+    equity_mr_long_only: true  # NQ/MNQ/ES/MES: only allow MR_Long (fade oversold dips).
+                               # ADDED 2026-04-04: MR_Short on equity indices in bull
+                               # market = PF=0.60, WR<15%. Equities trend up relentlessly.
+                               # MR_Short re-enable only when weekly HTF = BEAR.
+                               # GC/MGC unaffected — they are bidirectional.
+
+    max_hold_bars: 6           # Max bars to hold if target not reached.
+                               # MR trades should resolve fast; cut losers quick.
+
+    signal_window_start: "1000"  # ET — consistent with Mode A
+    signal_window_end:   "1430"  # ET — 30 min more time for GC/CL afternoon
+
 # ============================================================
 # REGIME CLASSIFIER PARAMETERS
 # Controls which strategies are active in which market conditions
@@ -255,20 +350,21 @@ position_sizing:
 # ============================================================
 
 risk_mode:
-  active: "medium"        # "safe" | "medium" | "hardcore"  (set from web UI)
+  active: "safe"          # "safe" | "medium" | "hardcore"  (set from web UI)
+                          # DEFAULT: "safe" — required for TopStep $50k account
 
   safe:
-    label:               "Safe"
-    description:         "1 contract max. Capital protection first. Topstep-compliant at any account size."
-    risk_per_trade_pct:  0.50    # 0.5% equity per trade ($750 at $150k)
+    label:               "Safe — TopStep $50k"
+    description:         "1 micro contract max. TopStep $50k compliant. $1k daily limit / $2k trailing DD."
+    risk_per_trade_pct:  0.50    # 0.5% equity per trade ($250 at $50k)
     max_contracts:       1       # Never more than 1 contract regardless of equity
-    daily_loss_cap_usd:  1500.0  # Hard stop: stop trading if daily loss exceeds this
-    trailing_dd_cap_usd: 2000.0  # Pause bot if trailing DD hits this
-    max_loss_per_trade_usd: 1000.0  # Per-trade hard cap (tightens ATR stop if needed)
+    daily_loss_cap_usd:  900.0   # Hard stop: $100 buffer below TopStep $1,000 daily limit
+    trailing_dd_cap_usd: 1800.0  # Pause bot: $200 buffer below TopStep $2,000 trailing DD
+    max_loss_per_trade_usd: 400.0  # Per-trade hard cap: max 40% of daily budget per trade
 
   medium:
     label:               "Medium"
-    description:         "Proven backtest config. 2-3 contracts. Current PF 2.19, Win 62.6%."
+    description:         "Standard config. 2-3 contracts. FHB PF 2.87, Win 63.5% (v3 comprehensive)."
     risk_per_trade_pct:  1.00    # 1.0% equity per trade ($1,500 at $150k)
     max_contracts:       3       # Up to 3 contracts based on ATR sizing
     daily_loss_cap_usd:  2500.0  # Current Topstep-safe hard stop
@@ -307,27 +403,28 @@ risk:
                                 # They are correlated (r=0.88), so we cap them.
 
   # Daily circuit breaker
-  daily_loss_alert_usd:    1500.0  # Telegram alert when daily loss hits this.
-  daily_loss_hard_stop_usd: 2500.0 # Bot closes ALL positions and stops trading.
-                                   # Topstep $150k limit is $3,000/day (2%).
-                                   # We stop at $2,500 -- $500 safety buffer.
+  daily_loss_alert_usd:    750.0   # Telegram alert when daily loss hits this.
+  daily_loss_hard_stop_usd: 900.0  # Bot closes ALL positions and stops trading.
+                                   # TopStep $50k limit is $1,000/day.
+                                   # We stop at $900 -- $100 safety buffer.
 
   # Trailing drawdown circuit breaker
-  trailing_dd_alert_usd:   2000.0  # Telegram alert when trailing DD hits this.
-  trailing_dd_pause_usd:   3000.0  # Bot pauses, requires manual restart.
-                                   # Topstep limit is $4,500. We pause at $3,000.
+  trailing_dd_alert_usd:   1500.0  # Telegram alert when trailing DD hits this.
+  trailing_dd_pause_usd:   1800.0  # Bot pauses, requires manual restart.
+                                   # TopStep $50k trailing DD limit is $2,000.
+                                   # We pause at $1,800 -- $200 safety buffer.
 
-  # Topstep official limits (reference only — bot enforces above values)
-  topstep_daily_limit_usd:      4500.0
-  topstep_trailing_dd_usd:      4500.0
+  # Topstep official limits for $50k funded account (reference only)
+  topstep_daily_limit_usd:      1000.0
+  topstep_trailing_dd_usd:      2000.0
 
-  # ── Priority 1: Per-trade hard loss cap (Phase 6+) ──────────────────────────
+  # ── Priority 1: Per-trade hard loss cap ──────────────────────────────────────
   # If the ATR-based stop implies a larger loss than this, the stop is tightened.
-  # Rationale: Topstep daily limit is $4,500. Our daily circuit breaker fires at
-  # $2,500. A single trade must never consume the entire daily budget.
+  # Rationale: TopStep $50k daily limit is $1,000. Our circuit breaker fires at
+  # $900. A single trade must never consume more than 40% of the daily budget.
   # Academic basis: Kelly Criterion + drawdown theory both require per-trade risk
   # to be bounded independently of volatility regime.
-  max_loss_per_trade_usd: 2000.0  # Hard cap: single trade loss ceiling ($)
+  max_loss_per_trade_usd: 400.0   # Hard cap: single trade loss ceiling ($)
   half_stop_r:            0.20    # Exit 50% of position at this adverse R level (P2)
                                   # Reduces avg full-stop loss from -1.0R to -0.60R
 
@@ -368,7 +465,8 @@ markets:
     commission:    5.00
     slippage_ticks: 1
     active:        true
-    vmr_eligible:  false         # Trend only
+    vmr_eligible:  true          # GC_REV is a mean-reversion fade strategy
+                                 # Signal disabled in enabled_signals until edge confirmed
 
   CL:
     name:          "WTI Crude Oil"
@@ -792,3 +890,95 @@ reporting:
     - expectancy_per_trade_usd
     - annual_returns_by_year
     - profit_factor_by_market
+
+# ============================================================
+# TV PAPER TRADING (TradingView Webhook + Internal Simulator)
+# ============================================================
+# Activate via: POST /api/bot/set_mode {"mode": "tv_paper"}
+# Or from the dashboard Control Center mode selector.
+#
+# Setup steps:
+#   1. Set webhook_secret to a random 32+ char string
+#   2. brew install ngrok && ngrok http 8000
+#   3. Configure TradingView alert webhook URL:
+#      https://YOUR-NGROK-URL.ngrok-free.app/api/webhook/signal
+#   4. The same secret must be embedded in your Pine Script inputs
+# ============================================================
+
+tv_paper:
+  # CHANGE THIS — must match the "secret" field in every Pine Script alert.
+  # Generate a random secret: python -c "import secrets; print(secrets.token_urlsafe(32))"
+  webhook_secret: "ZTf-p6zOJ9JW3MMlyNid8WCfEE8Hzvlfzbtk8T7n-6I"
+
+  # Paper account starting balance (used for P&L display and position sizing)
+  account_balance: 50000.0
+
+  # Your Cloudflare tunnel URL — auto-updated by scripts/start_trading_day.sh each morning.
+  # URL changes per session (trycloudflare.com). Update TradingView alerts after each run.
+  tunnel_url: "https://macbook-pro-nathan.taild84e1b.ts.net"
+
+  # How often the position monitor polls yfinance for stop/target checks (seconds)
+  monitor_interval_s: 60
+
+  # EOD settlement time (US Eastern) — settle all open positions at this time
+  eod_hour: 16
+  eod_minute: 5
+
+  # Webhook rate limit (max signals per minute per IP)
+  webhook_rate_limit: 10
+
+  # ── Strategy enable/disable filter ──────────────────────────
+  # Based on TV Strategy Tester analysis (2026-03-27, 140 XLSX files).
+  # Set to false to silently reject signals from that combination.
+  # Keys: "STRATEGY_MARKET" (specific) or "STRATEGY" (all markets).
+  enabled_signals:
+    FHB_NQ:       true   # LONG ONLY, market entry — TV backtest 2026-04-03
+                         #   Long: PF=1.73, WR=63.5%, 105 trades, Max DD=-$6,572
+                         #   Python backtest (market-close fills): PF=2.87, WR=63.5%
+    FHB_NQ_SHORT: false  # SHORT disabled — TV backtest: PF=0.918, net loser (103 trades)
+    FHB_ES:  false   # Net loser across all ES timeframes (-$118K)
+    GC:      false   # DISABLED 2026-03-30: edge unconfirmed (see criteria below)
+                     #   Validation results (673 trades, 2.4 years):
+                     #     PF=1.22 | WR=45.9% | Ruin=34.61% | p=0.1249
+                     #   All three hard gates FAILED:
+                     #     ✗ Monte Carlo ruin probability 34.6% (limit: <15%)
+                     #     ✗ p-value 0.1249 (not statistically significant)
+                     #     ✗ Parameter sensitivity: only 8/25 stress cells positive
+                     #   Re-enable criteria (ALL must be met):
+                     #     ✓ 100+ paper trades logged in live market
+                     #     ✓ Win rate ≥ 50% in paper trading
+                     #     ✓ Profit Factor ≥ 1.5 over 100+ trades
+                     #     ✓ Monte Carlo ruin probability < 15%
+                     #     ✓ p-value < 0.05
+    CL:      false   # Net loser across ALL CL timeframes (-$102K)
+    ORB_NQ:  false   # DISABLED v3 — bar-close entry structurally broken
+    ORB_ES:  false   # Net loser on ES
+
+  # ── Recommended TradingView alert timeframes ─────────────────
+  # These are NOT enforced by code. They tell you which chart to
+  # set the alert on in TradingView for the best results.
+  recommended_timeframes:
+    FHB: "15m"       # NQ1! 15m — confirmed edge, active
+    GC:  "disabled"  # Paused — edge unconfirmed, re-enable after 100 paper trades
+    ORB: "5m"        # NQ1! 5m — designed timeframe (strategy disabled)
+    CL:  "disabled"  # Net loser across all timeframes
+
+# ============================================================
+# TELEGRAM ALERTS
+# ============================================================
+# Get trade notifications on your phone for every fill, exit,
+# loss alert, and end-of-day summary.
+#
+# Setup (one-time, ~2 minutes):
+#   1. Open Telegram → search @BotFather → /newbot → copy the token.
+#   2. Send your new bot any message (so it can reach you).
+#   3. Run: curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+#      Find "chat" → "id" — that is your chat_id.
+#   4. Set enabled: true below and fill in the values.
+#
+# If not configured (enabled: false), the bot runs silently — no effect.
+# ============================================================
+telegram:
+  enabled:   true
+  bot_token: "8657717511:AAExUK7qYXp6y-tUZSBOrT1uUJjN3eQTb_w"
+  chat_id:   "7132171562"

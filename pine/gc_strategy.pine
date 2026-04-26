@@ -1,0 +1,82 @@
+//@version=6
+// AlgoBot — GC Gold Mean-Reversion Strategy  v3
+// Chart: MGC1! (Micro Gold, 10 oz) — 30m timeframe
+// ⚠ ALWAYS USE MGC — NOT GC. Full GC (100 oz) has ~41% MaxDD on $50K. MGC MaxDD ~4%.
+//
+// Python Backtest (2026-03-27): PF=1.22, WR=45.9%, 673 trades, 2.4 years (Yahoo Finance)
+// SC OOS (Mar 2025–Mar 2026): 4 trades, WR=100% (sample too small to rely on)
+//
+// Range = first 60 min of RTH (9:30–10:30 ET)
+// Signal = FADES the first breakout (inverted direction vs FHB)
+// Signal window 10:30–13:00 ET — gold reversals take 2-4 hours
+strategy("AlgoBot GC Mean-Reversion Strategy v3", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+webhook_secret = input.string("CHANGE_ME_RANDOM_SECRET_HERE", "Webhook Secret")
+market         = input.string("MGC", "Market", options=["MGC","GC"])  // MGC default: 10x smaller, MaxDD ~4% vs 41%
+risk_mode      = input.string("safe", "Risk Mode", options=["safe","medium","hardcore"])
+max_cts        = input.int(1, "Max Contracts", minval=1, maxval=5)
+size_mult      = input.float(1.0, "Size Multiplier", minval=0.1, maxval=3.0, step=0.1)
+stop_atr_mult  = input.float(1.0, "Stop ATR Mult", minval=0.5, maxval=2.5, step=0.1)
+target_r       = input.float(1.0, "Target R", minval=0.5, maxval=3.0, step=0.25)
+gls_score      = input.int(70, "GLS Score", minval=0, maxval=100)
+
+// ── Session windows (timezone-safe — works on all timeframes) ─────────────────
+is_range_bar   = not na(time(timeframe.period, "0930-1030", "America/New_York"))
+is_signal_bar  = not na(time(timeframe.period, "1030-1300", "America/New_York"))  // 10:30–13:00 ET — aligned with Python gc_signal.py
+
+// ── Range capture ─────────────────────────────────────────────────────────────
+var float gc_high     = na
+var float gc_low      = na
+var bool  fired_long  = false
+var bool  fired_short = false
+
+if dayofweek != dayofweek[1]
+    gc_high      := na
+    gc_low       := na
+    fired_long   := false
+    fired_short  := false
+
+if is_range_bar
+    gc_high := na(gc_high) ? high : math.max(gc_high, high)
+    gc_low  := na(gc_low)  ? low  : math.min(gc_low,  low)
+
+// This is beautiful
+// ── ATR / HTF ─────────────────────────────────────────────────────────────────
+atr14    = ta.atr(14)
+htf_bull = close > ta.ema(close, 50)
+htf_bear = close < ta.ema(close, 50)
+htf_bias = htf_bull ? "BULL" : "BEAR"
+
+// ── Entry / stop / target ─────────────────────────────────────────────────────
+long_entry   = close
+long_stop    = long_entry  - atr14 * stop_atr_mult
+long_target  = long_entry  + (long_entry - long_stop) * target_r
+
+short_entry  = close
+short_stop   = short_entry + atr14 * stop_atr_mult
+short_target = short_entry - (short_stop - short_entry) * target_r
+
+// ── Signals: FADE the breakout ────────────────────────────────────────────────
+range_ready  = not na(gc_high) and not na(gc_low)
+long_signal  = is_signal_bar and barstate.isconfirmed and range_ready and close < gc_low  and not htf_bear and not fired_long
+short_signal = is_signal_bar and barstate.isconfirmed and range_ready and close > gc_high and not htf_bull and not fired_short
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+if long_signal
+    fired_long := true
+    strategy.entry("GC Long", strategy.long)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"GC","direction":"LONG","entry":' + str.tostring(math.round(long_entry, 2)) + ',"stop":' + str.tostring(math.round(long_stop, 2)) + ',"target":' + str.tostring(math.round(long_target, 2)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+if short_signal
+    fired_short := true
+    strategy.entry("GC Short", strategy.short)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"GC","direction":"SHORT","entry":' + str.tostring(math.round(short_entry, 2)) + ',"stop":' + str.tostring(math.round(short_stop, 2)) + ',"target":' + str.tostring(math.round(short_target, 2)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+// ── Visuals ───────────────────────────────────────────────────────────────────
+plot(gc_high, "GC High", color=color.new(color.green, 50), linewidth=1, style=plot.style_stepline)
+plot(gc_low,  "GC Low",  color=color.new(color.red,   50), linewidth=1, style=plot.style_stepline)
+plotshape(long_signal,  title="GC LONG (Fade)",  location=location.belowbar, color=color.green, style=shape.triangleup,   size=size.small)
+plotshape(short_signal, title="GC SHORT (Fade)", location=location.abovebar, color=color.red,   style=shape.triangledown, size=size.small)

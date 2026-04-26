@@ -3,175 +3,326 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AlgoBot — Sign In</title>
+<title>AlgoBot — Secure Access</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;800&family=Fira+Mono:wght@400;500&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#000000;
-  --glass:rgba(18,18,24,0.88);
-  --border:rgba(255,255,255,0.1);
-  --blue:#0a84ff;
-  --green:#30d158;
-  --red:#ff453a;
-  --t1:#ffffff;
-  --t2:rgba(255,255,255,0.72);
-  --t3:rgba(255,255,255,0.42);
-  --t4:rgba(255,255,255,0.22);
+  --void:#02040A; --base:#050C18; --surface:#091525;
+  --teal:#00C6D8; --teal-glow:rgba(0,198,216,0.15);
+  --green:#00E676; --red:#FF1744;
+  --text-hi:#D8EEFF; --text-md:#4A7899; --text-lo:#1A3D58;
+  --border-lo:#0E2035; --border-md:#1A3856; --border-hi:rgba(0,198,216,0.35);
+  --fx:'Exo 2',sans-serif; --fm:'Fira Mono',monospace; --fb:'Barlow',sans-serif;
 }
-html,body{
-  height:100%;overflow:hidden;background:var(--bg);color:var(--t2);
-  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
-  -webkit-font-smoothing:antialiased;
-}
-/* Gradient backdrop */
-body::before{
-  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:
-    radial-gradient(ellipse 120% 80% at 20% 0%,rgba(10,132,255,0.09) 0%,transparent 55%),
-    radial-gradient(ellipse 80% 60% at 80% 110%,rgba(48,209,88,0.06) 0%,transparent 50%);
-}
-/* Subtle grid */
-body::after{
-  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.018) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,0.018) 1px,transparent 1px);
-  background-size:52px 52px;
-}
-.scene{
-  position:relative;z-index:1;height:100vh;
+html,body{height:100%;overflow:hidden;background:var(--void);color:var(--text-md);
+  font-family:var(--fb);-webkit-font-smoothing:antialiased;}
+
+/* ── Layout ────────────────────────────────────────────────── */
+.layout{display:flex;height:100vh;}
+
+/* ── Left panel ─────────────────────────────────────────────── */
+.left{
+  width:42%;min-width:380px;
+  background:var(--void);
+  border-right:1px solid var(--border-lo);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:2.2rem;padding:2rem;
+  padding:3rem;position:relative;overflow:hidden;
 }
-/* Brand mark */
-.brand{display:flex;flex-direction:column;align-items:center;gap:.6rem}
-.brand-icon{
-  width:64px;height:64px;border-radius:18px;
-  background:linear-gradient(145deg,rgba(10,132,255,0.22),rgba(48,209,88,0.12));
-  border:1px solid rgba(10,132,255,0.28);
+.dot-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(circle,rgba(0,198,216,0.07) 1px,transparent 1px);
+  background-size:28px 28px;
+}
+.left-vignette{
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 75% 75% at 50% 50%,transparent 35%,var(--void) 100%);
+}
+.left-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:1.5rem;text-align:center;}
+/* Animated chart in background */
+.bg-chart{position:absolute;bottom:0;left:0;right:0;height:100px;opacity:0.08;pointer-events:none;}
+
+/* Logo mark */
+.logo-mark{
+  width:82px;height:82px;border-radius:14px;position:relative;
+  background:linear-gradient(135deg,rgba(0,198,216,0.07),rgba(0,198,216,0.02));
+  border:1px solid rgba(0,198,216,0.18);
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 0 40px rgba(10,132,255,0.15),0 8px 24px rgba(0,0,0,0.5);
-  animation:float 4.5s ease-in-out infinite;
+  box-shadow:0 0 40px rgba(0,198,216,0.08),inset 0 1px 0 rgba(0,198,216,0.08);
+  animation:logo-float 5s ease-in-out infinite;
 }
-.brand-icon svg{width:34px;height:34px}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-.brand-name{
-  font-size:1.5rem;font-weight:700;color:var(--t1);
-  letter-spacing:-.025em;
+.logo-mark::before,.logo-mark::after{content:'';position:absolute;border-style:solid;border-color:var(--teal);opacity:0.5;}
+.logo-mark::before{top:-4px;left:-4px;width:14px;height:14px;border-width:2px 0 0 2px;border-radius:2px;}
+.logo-mark::after{bottom:-4px;right:-4px;width:14px;height:14px;border-width:0 2px 2px 0;border-radius:2px;}
+@keyframes logo-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+
+.logo-name{
+  font-family:var(--fx);font-size:2.75rem;font-weight:800;
+  color:var(--text-hi);letter-spacing:0.04em;line-height:1;
+  text-shadow:0 0 40px rgba(0,198,216,0.2);
 }
-.brand-sub{
-  font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--t4);
-  letter-spacing:.12em;text-transform:uppercase;
+.logo-tagline{
+  font-family:var(--fm);font-size:0.62rem;
+  color:var(--text-md);letter-spacing:0.18em;text-transform:uppercase;
+}
+.logo-ver{
+  font-family:var(--fm);font-size:0.6rem;color:var(--teal);opacity:0.6;
+  border:1px solid rgba(0,198,216,0.2);padding:3px 10px;border-radius:3px;letter-spacing:0.08em;
 }
 
-/* Card */
+/* Performance pills */
+.perf-pills{display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;margin-top:0.25rem;}
+.pill{
+  background:rgba(0,198,216,0.05);border:1px solid var(--border-lo);
+  border-radius:4px;padding:0.3rem 0.65rem;font-family:var(--fm);font-size:0.6rem;
+}
+.pill-k{color:var(--text-lo);}
+.pill-v{color:var(--text-hi);font-weight:500;margin-left:0.3rem;}
+.pill-v.g{color:var(--green);}
+
+/* ── Right panel ─────────────────────────────────────────────── */
+.right{
+  flex:1;background:var(--base);
+  display:flex;align-items:center;justify-content:center;
+  padding:3rem;
+  background-image:
+    radial-gradient(circle at 80% 15%,rgba(0,198,216,0.025) 0%,transparent 50%),
+    radial-gradient(circle at 20% 85%,rgba(0,198,216,0.015) 0%,transparent 40%);
+}
+
+/* ── Auth card ───────────────────────────────────────────────── */
 .card{
-  background:var(--glass);border:1px solid var(--border);border-radius:18px;
-  padding:2.4rem 2.2rem;width:100%;max-width:380px;
-  backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);
-  box-shadow:0 0 0 1px rgba(255,255,255,0.04) inset,0 24px 64px rgba(0,0,0,0.55);
-  animation:fadeUp .5s cubic-bezier(.4,0,.2,1) both .15s;
+  width:100%;max-width:390px;
+  background:rgba(9,21,37,0.85);
+  border:1px solid var(--border-md);border-radius:10px;
+  padding:2.5rem 2.25rem;
+  backdrop-filter:blur(30px);
+  box-shadow:0 0 0 1px rgba(0,198,216,0.03) inset,0 30px 60px rgba(0,0,0,0.5),0 0 80px rgba(0,198,216,0.02);
+  position:relative;overflow:hidden;
+  animation:card-in 0.6s cubic-bezier(0.23,1,0.32,1) both 0.1s;
 }
-@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
-.card-title{
-  font-size:.72rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
-  color:var(--t3);text-align:center;margin-bottom:1.8rem;
+.card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,198,216,0.45),transparent);
 }
-.field{display:flex;flex-direction:column;gap:.35rem;margin-bottom:1rem}
-.field label{font-size:.68rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--t3)}
-.field input{
-  background:rgba(255,255,255,0.05);border:1px solid var(--border);
-  border-radius:9px;padding:.75rem .95rem;color:var(--t1);
-  font-family:'Inter',sans-serif;font-size:.9rem;outline:none;
-  transition:border-color .2s,background .2s;
+.card-corner{position:absolute;border-style:solid;border-color:rgba(0,198,216,0.4);}
+.card-corner.tl{top:0;left:0;width:18px;height:18px;border-width:2px 0 0 2px;}
+.card-corner.br{bottom:0;right:0;width:18px;height:18px;border-width:0 2px 2px 0;}
+.card-sweep{
+  position:absolute;top:-100%;left:-60%;width:40%;height:300%;
+  background:linear-gradient(105deg,transparent,rgba(0,198,216,0.012),transparent);
+  animation:sweep 8s ease-in-out infinite;pointer-events:none;
 }
-.field input:focus{border-color:var(--blue);background:rgba(255,255,255,0.07)}
-.field input::placeholder{color:var(--t4)}
-.btn{
-  width:100%;padding:.82rem;margin-top:.6rem;
-  background:var(--blue);border:none;border-radius:10px;
-  color:#fff;font-family:'Inter',sans-serif;font-size:.88rem;font-weight:600;
-  letter-spacing:.01em;cursor:pointer;
-  transition:opacity .2s,transform .15s;
-  display:flex;align-items:center;justify-content:center;gap:.5rem;
+@keyframes sweep{0%,100%{transform:translateX(-100%)}50%{transform:translateX(750%)}}
+
+.card-label{
+  text-align:center;font-family:var(--fm);font-size:0.6rem;
+  letter-spacing:0.2em;text-transform:uppercase;color:var(--text-lo);margin-bottom:2rem;
 }
-.btn:hover{opacity:.88}
-.btn:active{transform:scale(0.985)}
-.btn.loading{opacity:.65;pointer-events:none}
-.spinner{
-  width:15px;height:15px;border:2px solid rgba(255,255,255,0.25);
-  border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none;
+.card-label em{color:var(--teal);font-style:normal;opacity:0.7;}
+
+/* Fields */
+.field{margin-bottom:1.1rem;}
+.field-lbl{
+  display:block;font-family:var(--fm);font-size:0.58rem;font-weight:500;
+  letter-spacing:0.15em;text-transform:uppercase;
+  color:rgba(0,198,216,0.6);margin-bottom:0.4rem;
 }
-.btn.loading .spinner{display:block}
-.btn.loading .btn-txt{display:none}
-@keyframes spin{to{transform:rotate(360deg)}}
+.field-wrap{position:relative;}
+.field-icon{
+  position:absolute;left:0.875rem;top:50%;transform:translateY(-50%);
+  width:14px;height:14px;color:rgba(0,198,216,0.3);pointer-events:none;display:flex;
+}
+.field-wrap input{
+  width:100%;padding:0.78rem 0.9rem 0.78rem 2.5rem;
+  background:rgba(0,198,216,0.03);border:1px solid rgba(0,198,216,0.1);
+  border-radius:5px;color:var(--text-hi);font-family:var(--fm);font-size:0.85rem;
+  outline:none;transition:border-color 0.2s,background 0.2s,box-shadow 0.2s;letter-spacing:0.04em;
+}
+.field-wrap input:focus{
+  border-color:rgba(0,198,216,0.35);background:rgba(0,198,216,0.05);
+  box-shadow:0 0 0 3px rgba(0,198,216,0.07);
+}
+.field-wrap input::placeholder{color:rgba(216,238,255,0.18);}
+
+/* Button */
+.submit-btn{
+  width:100%;padding:0.875rem;margin-top:0.5rem;
+  background:linear-gradient(135deg,rgba(0,198,216,0.12),rgba(0,198,216,0.06));
+  border:1px solid rgba(0,198,216,0.28);border-radius:5px;
+  color:var(--teal);font-family:var(--fx);font-size:0.78rem;font-weight:700;
+  letter-spacing:0.16em;text-transform:uppercase;cursor:pointer;
+  position:relative;overflow:hidden;transition:all 0.2s;
+  box-shadow:0 0 20px rgba(0,198,216,0.05);
+}
+.submit-btn::before{
+  content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(0,198,216,0.1),transparent);transition:left 0.5s;
+}
+.submit-btn:hover::before{left:100%;}
+.submit-btn:hover{border-color:rgba(0,198,216,0.5);box-shadow:0 0 30px rgba(0,198,216,0.14);color:var(--text-hi);}
+.submit-btn:active{transform:scale(0.99);}
+.submit-btn.loading{opacity:0.6;pointer-events:none;}
+.btn-inner{display:flex;align-items:center;justify-content:center;gap:0.6rem;}
+.spin{width:14px;height:14px;border:1.5px solid rgba(0,198,216,0.25);border-top-color:var(--teal);
+  border-radius:50%;animation:_spin 0.6s linear infinite;display:none;}
+@keyframes _spin{to{transform:rotate(360deg)}}
+.submit-btn.loading .spin{display:block;}
+.submit-btn.loading .btn-txt{display:none;}
+
+/* Error */
 .err{
-  background:rgba(255,69,58,0.1);border:1px solid rgba(255,69,58,0.25);
-  border-radius:8px;padding:.6rem .9rem;font-size:.78rem;color:#ff7575;
-  margin-top:.9rem;display:none;animation:shake .3s ease;
+  background:rgba(255,23,68,0.07);border:1px solid rgba(255,23,68,0.2);
+  border-radius:5px;padding:0.6rem 0.9rem;font-size:0.78rem;color:rgba(255,100,130,0.9);
+  margin-top:0.875rem;display:none;animation:shake 0.3s ease;font-family:var(--fb);
 }
-.err.show{display:block}
+.err.show{display:block;}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+/* Status footer */
+.status-footer{
+  display:flex;align-items:center;justify-content:center;gap:0.5rem;
+  margin-top:1.25rem;font-family:var(--fm);font-size:0.58rem;
+  color:var(--text-lo);letter-spacing:0.07em;
+}
+.status-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--green);box-shadow:0 0 6px var(--green);
+  animation:pulse-dot 2.5s ease-in-out infinite;
+}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* Entrance animations */
+.left-inner{animation:fade-down 0.7s cubic-bezier(0.23,1,0.32,1) both;}
+.card{animation:fade-up 0.65s cubic-bezier(0.23,1,0.32,1) both 0.1s;}
+@keyframes fade-down{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:none}}
+@keyframes fade-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+@keyframes card-in{from{opacity:0;transform:translateY(20px) scale(0.98)}to{opacity:1;transform:none}}
+
+@media(max-width:800px){
+  .layout{flex-direction:column;}
+  .left{width:100%;min-width:0;flex:0 0 auto;padding:2.5rem 2rem;height:auto;border-right:none;border-bottom:1px solid var(--border-lo);}
+  .right{padding:2rem;}
+}
 </style>
 </head>
 <body>
-<div class="scene">
-  <div class="brand">
-    <div class="brand-icon">
-      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="5" y="14" width="30" height="20" rx="5" stroke="#0a84ff" stroke-width="2.2"/>
-        <circle cx="15" cy="24" r="3.5" fill="#0a84ff"/>
-        <circle cx="25" cy="24" r="3.5" fill="#0a84ff"/>
-        <path d="M15 14v-3a5 5 0 0 1 10 0v3" stroke="#0a84ff" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M12 30h16" stroke="#30d158" stroke-width="2.2" stroke-linecap="round"/>
-      </svg>
+<div class="layout">
+  <!-- LEFT: Branding -->
+  <div class="left">
+    <div class="dot-grid"></div>
+    <div class="left-vignette"></div>
+    <div class="left-inner">
+      <div class="logo-mark">
+        <svg width="42" height="42" viewBox="0 0 42 42" fill="none">
+          <polyline points="4,34 14,19 23,25 36,8" stroke="#00C6D8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+          <polyline points="30,8 36,8 36,14" stroke="#00C6D8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="4" y1="38" x2="38" y2="38" stroke="#00E676" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/>
+          <circle cx="36" cy="8" r="2.5" fill="#00C6D8" opacity="0.4"/>
+          <circle cx="23" cy="25" r="2" fill="#00C6D8" opacity="0.3"/>
+          <circle cx="14" cy="19" r="1.5" fill="#00C6D8" opacity="0.25"/>
+        </svg>
+      </div>
+      <div class="logo-name">AlgoBot</div>
+      <div class="logo-tagline">Algorithmic Futures Trading System</div>
+      <div class="logo-ver">v3.0 · NEXUS TERMINAL</div>
+      <div class="perf-pills">
+        <div class="pill"><span class="pill-k">Win Rate</span><span class="pill-v g">63.5%</span></div>
+        <div class="pill"><span class="pill-k">P/F</span><span class="pill-v g">2.87</span></div>
+        <div class="pill"><span class="pill-k">208 Trades</span><span class="pill-v g">FHB NQ</span></div>
+        <div class="pill"><span class="pill-k">MC Ruin</span><span class="pill-v g">2.35%</span></div>
+      </div>
     </div>
-    <div class="brand-name">AlgoBot</div>
-    <div class="brand-sub">Algorithmic Trading System v2.1</div>
+    <!-- Decorative chart line at bottom -->
+    <svg class="bg-chart" viewBox="0 0 600 100" preserveAspectRatio="none" fill="none">
+      <polyline
+        points="0,85 40,70 90,60 150,65 210,42 270,52 340,28 400,38 460,22 530,30 580,18 600,20"
+        stroke="#00C6D8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path
+        d="M0,85 L40,70 90,60 150,65 210,42 270,52 340,28 400,38 460,22 530,30 580,18 600,20 L600,100 L0,100 Z"
+        fill="rgba(0,198,216,0.05)"/>
+    </svg>
   </div>
 
-  <div class="card">
-    <div class="card-title">Sign In</div>
-    <form id="form" onsubmit="login(event)">
-      <div class="field">
-        <label>Username</label>
-        <input type="text" id="u" placeholder="Enter username" autocomplete="username" required>
+  <!-- RIGHT: Login form -->
+  <div class="right">
+    <div class="card">
+      <div class="card-corner tl"></div>
+      <div class="card-corner br"></div>
+      <div class="card-sweep"></div>
+      <div class="card-label">— <em>SECURE</em> ACCESS <em>TERMINAL</em> —</div>
+      <form id="form" onsubmit="login(event)">
+        <div class="field">
+          <label class="field-lbl">Operator ID</label>
+          <div class="field-wrap">
+            <span class="field-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+              </svg>
+            </span>
+            <input type="text" id="u" placeholder="operator_id" autocomplete="username" required>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-lbl">Auth Code</label>
+          <div class="field-wrap">
+            <span class="field-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>
+              </svg>
+            </span>
+            <input type="password" id="p" placeholder="••••••••" autocomplete="current-password" required>
+          </div>
+        </div>
+        <button type="submit" class="submit-btn" id="btn">
+          <div class="btn-inner">
+            <div class="spin"></div>
+            <span class="btn-txt">AUTHENTICATE →</span>
+          </div>
+        </button>
+      </form>
+      <div class="err" id="err"></div>
+      <div class="status-footer">
+        <div class="status-dot"></div>
+        <span>SYSTEM SECURE · LOCALHOST · JWT-256</span>
       </div>
-      <div class="field">
-        <label>Password</label>
-        <input type="password" id="p" placeholder="Enter password" autocomplete="current-password" required>
-      </div>
-      <button type="submit" class="btn" id="btn">
-        <div class="spinner"></div>
-        <span class="btn-txt">Continue</span>
-      </button>
-    </form>
-    <div class="err" id="err"></div>
+    </div>
   </div>
 </div>
 
 <script>
-async function login(e){
+async function login(e) {
   e.preventDefault();
-  const btn=document.getElementById('btn'),err=document.getElementById('err');
-  btn.classList.add('loading');err.classList.remove('show');
-  try{
-    const r=await fetch('/auth/login',{
-      method:'POST',
-      headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:new URLSearchParams({username:document.getElementById('u').value,password:document.getElementById('p').value})
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('err');
+  btn.classList.add('loading');
+  err.classList.remove('show');
+  try {
+    const r = await fetch('/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        username: document.getElementById('u').value,
+        password: document.getElementById('p').value
+      })
     });
-    const d=await r.json();
-    if(r.ok&&d.ok){location.href='/'}
-    else{err.textContent=d.error||'Authentication failed.';err.classList.add('show')}
-  }catch{
-    err.textContent='Connection error. Try again.';err.classList.add('show')
-  }finally{
-    btn.classList.remove('loading')
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      location.href = '/';
+    } else {
+      err.textContent = d.error || 'Authentication failed.';
+      err.classList.add('show');
+    }
+  } catch {
+    err.textContent = 'Connection error. Check server status.';
+    err.classList.add('show');
+  } finally {
+    btn.classList.remove('loading');
   }
 }
+// Enter key on any field
+document.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('form').requestSubmit(); });
 </script>
 </body>
 </html>

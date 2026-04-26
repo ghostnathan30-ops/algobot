@@ -30,8 +30,9 @@ _lock = threading.Lock()
 
 # Default state (first run)
 _DEFAULTS: dict[str, Any] = {
-    "risk_mode":        "medium",
-    "account_override": None,      # None = pull from IBKR live
+    "risk_mode":        "safe",    # Default to safe for TopStep $50k account
+    "trading_mode":     "tv_paper", # "ibkr" | "tv_paper"
+    "account_override": None,      # None = pull from IBKR live (ibkr mode) / config (tv_paper mode)
     "bot_running":      False,
     "paper_mode":       True,
     "daily_pnl":        0.0,
@@ -39,6 +40,7 @@ _DEFAULTS: dict[str, Any] = {
     "daily_wins":       0,
     "daily_losses":     0,
     "open_positions":   [],
+    "pending_tv_signals": [],      # IPC queue: webhook → run_tv_paper_trading.py
     "last_updated":     datetime.now().isoformat(timespec="seconds"),
     # Strategy improvement plugins (each can be toggled from the web panel)
     "strategy_flags": {
@@ -57,18 +59,18 @@ _DEFAULTS: dict[str, Any] = {
 # Risk mode definitions (mirrors config.yaml)
 RISK_MODES: dict[str, dict] = {
     "safe": {
-        "label":                   "Safe",
-        "description":             "1 contract max. Capital protection first. Topstep-compliant.",
+        "label":                   "Safe — TopStep $50k",
+        "description":             "1 micro contract max. TopStep $50k compliant. $1k daily limit / $2k trailing DD.",
         "risk_per_trade_pct":      0.50,
         "max_contracts":           1,
-        "daily_loss_cap_usd":      1500.0,
-        "trailing_dd_cap_usd":     2000.0,
-        "max_loss_per_trade_usd":  1000.0,
+        "daily_loss_cap_usd":      900.0,
+        "trailing_dd_cap_usd":     1800.0,
+        "max_loss_per_trade_usd":  400.0,
         "color":                   "#00c878",   # green
     },
     "medium": {
         "label":                   "Medium",
-        "description":             "Proven backtest config. PF 2.19 | Win 62.6% | Max DD -$6.4k",
+        "description":             "Standard config. FHB PF 2.87 | Win 63.5% | Max DD -$7.6k (v3 comprehensive)",
         "risk_per_trade_pct":      1.00,
         "max_contracts":           3,
         "daily_loss_cap_usd":      2500.0,
@@ -138,6 +140,23 @@ def set_account_override(balance: Optional[float]) -> dict:
         s["last_updated"]     = datetime.now().isoformat(timespec="seconds")
         _write(s)
     return get_state()
+
+
+def set_trading_mode(mode: str) -> dict:
+    """Set trading mode: 'ibkr' for TWS, 'tv_paper' for TradingView webhook + paper simulator."""
+    if mode not in ("ibkr", "tv_paper"):
+        raise ValueError(f"Unknown trading mode: {mode!r}. Choose 'ibkr' or 'tv_paper'.")
+    with _lock:
+        s = _read()
+        s["trading_mode"] = mode
+        s["last_updated"] = datetime.now().isoformat(timespec="seconds")
+        _write(s)
+    return get_state()
+
+
+def get_trading_mode() -> str:
+    """Return current trading mode ('ibkr' or 'tv_paper')."""
+    return _read().get("trading_mode", "ibkr")
 
 
 def set_bot_running(running: bool) -> dict:

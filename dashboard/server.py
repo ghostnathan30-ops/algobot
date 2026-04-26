@@ -19,12 +19,17 @@ First time setup (create login):
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import math
 import os
 import re
 import subprocess
 import sys
+import threading
+import time
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -47,6 +52,7 @@ from dashboard.bot_state import (
     get_state, set_risk_mode, set_account_override,
     set_bot_running, compute_position_size, RISK_MODES,
     set_strategy_flags, get_strategy_flags,
+    set_trading_mode, get_trading_mode,
 )
 
 CACHE_FILE = Path(__file__).parent / "cache" / "trades.json"
@@ -61,12 +67,12 @@ app.add_middleware(
     allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 # ── Security headers + auth middleware ────────────────────────────────────────
 
-PUBLIC_PATHS = ("/login", "/auth/", "/static/", "/api/reload", "/ws/")
+PUBLIC_PATHS = ("/login", "/auth/", "/static/", "/api/reload", "/ws/", "/api/webhook/", "/api/health/")
 
 
 @app.middleware("http")
@@ -165,21 +171,24 @@ async def index():
 # ── Cache helpers ─────────────────────────────────────────────────────────────
 
 _cache: dict = {}
+_cache_lock  = threading.Lock()
 
 
 def _load_cache() -> dict:
     global _cache
-    if _cache:
+    with _cache_lock:
+        if _cache:
+            return _cache
+        if not CACHE_FILE.exists():
+            return {}
+        _cache = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
         return _cache
-    if not CACHE_FILE.exists():
-        return {}
-    _cache = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-    return _cache
 
 
 def _reload_cache():
     global _cache
-    _cache = {}
+    with _cache_lock:
+        _cache = {}
     return _load_cache()
 
 
@@ -244,6 +253,25 @@ def compute_metrics(trades: list[dict], daily: list[dict]) -> dict:
     }
 
 
+# ── TradingView webhook helpers ───────────────────────────────────────────────
+
+_CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
+
+def _load_webhook_secret() -> str:
+    """Load webhook_secret from config/config.yaml tv_paper section."""
+    try:
+        import yaml  # type: ignore
+        cfg = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8"))
+        return str(cfg.get("tv_paper", {}).get("webhook_secret", ""))
+    except Exception:
+        return ""
+
+
+# Rate limit: track per-IP request timestamps (last 60s window)
+_webhook_rate: dict[str, list[float]] = defaultdict(list)
+_WEBHOOK_RATE_MAX = 10   # max requests per minute per IP
+
+
 # ── API routes ────────────────────────────────────────────────────────────────
 
 @app.get("/api/status")
@@ -277,12 +305,19 @@ async def api_equity():
     daily = _get_daily()
     if not daily:
         return []
-    dp   = pd.DataFrame(daily).sort_values("date")
-    eq   = dp["pnl"].astype(float).cumsum()
-    peak = eq.cummax()
-    dd   = ((eq - peak) / peak.abs().replace(0, np.nan) * 100).fillna(0)
-    return [{"date": str(r["date"]), "equity": round(float(eq.iloc[i]), 2),
-             "dd_pct": round(float(dd.iloc[i]), 2), "daily_pnl": round(float(r["pnl"]), 2)}
+    ACCOUNT = 50_000.0
+    dp    = pd.DataFrame(daily).sort_values("date")
+    pnl   = dp["pnl"].astype(float)
+    eq    = pnl.cumsum()                          # cumulative P&L from 0
+    bal   = ACCOUNT + eq                          # account balance
+    peak  = bal.cummax()
+    dd    = (bal - peak) / peak * 100             # drawdown % relative to account
+    dd    = dd.fillna(0)
+    return [{"date": str(r["date"]),
+             "equity":    round(float(eq.iloc[i]), 2),
+             "balance":   round(float(bal.iloc[i]), 2),
+             "dd_pct":    round(float(dd.iloc[i]), 2),
+             "daily_pnl": round(float(r["pnl"]), 2)}
             for i, (_, r) in enumerate(dp.iterrows())]
 
 
@@ -494,6 +529,110 @@ async def update_flags(request: Request):
     return {"ok": True, "strategy_flags": state["strategy_flags"]}
 
 
+# ── Trading mode (ibkr ↔ tv_paper) ───────────────────────────────────────────
+
+@app.post("/api/bot/set_mode")
+async def set_trading_mode_endpoint(request: Request):
+    """Switch between 'ibkr' (TWS) and 'tv_paper' (TradingView webhook paper trading)."""
+    body = await request.json()
+    mode = body.get("mode", "")
+    if mode not in ("ibkr", "tv_paper"):
+        return JSONResponse(
+            {"error": f"Invalid trading mode {mode!r}. Choose 'ibkr' or 'tv_paper'."},
+            status_code=400,
+        )
+    state = set_trading_mode(mode)
+    return {"ok": True, "trading_mode": mode, "state": state}
+
+
+# ── TradingView webhook receiver ──────────────────────────────────────────────
+
+_REQUIRED_SIGNAL_FIELDS = {"market", "strategy", "direction", "entry", "stop", "target"}
+
+
+@app.post("/api/webhook/signal")
+async def webhook_signal(request: Request):
+    """
+    Receive a TradingView Pine Script JSON alert.
+
+    Security:
+      - Rate limited to 10 requests/minute per IP
+      - Secret validated via hmac.compare_digest (constant-time)
+      - Must be in tv_paper mode with bot_running=True
+
+    Expected payload:
+      { "secret": "...", "market": "ES", "strategy": "ORB",
+        "direction": "LONG", "entry": 5820.25, "stop": 5802.00,
+        "target": 5856.75, "size_mult": 1.0, "gls_score": 75,
+        "htf_bias": "BULL", "risk_mode": "safe", "max_contracts": 1 }
+    """
+    # 1. Rate limiting (per client IP)
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    window = _webhook_rate[client_ip]
+    _webhook_rate[client_ip] = [t for t in window if now - t < 60]
+    if len(_webhook_rate[client_ip]) >= _WEBHOOK_RATE_MAX:
+        return JSONResponse({"error": "rate_limit_exceeded"}, status_code=429)
+    _webhook_rate[client_ip].append(now)
+
+    # 2. Parse body
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid_json"}, status_code=400)
+
+    # 3. Secret validation
+    cfg_secret = _load_webhook_secret()
+    incoming_secret = str(body.get("secret", ""))
+    if not cfg_secret or not hmac.compare_digest(
+        hashlib.sha256(incoming_secret.encode()).hexdigest(),
+        hashlib.sha256(cfg_secret.encode()).hexdigest(),
+    ):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    # 4. Validate required fields
+    missing = _REQUIRED_SIGNAL_FIELDS - body.keys()
+    if missing:
+        return JSONResponse(
+            {"error": f"missing_fields: {sorted(missing)}"},
+            status_code=422,
+        )
+
+    # 5. Check trading mode
+    state = get_state()
+    if state.get("trading_mode") != "tv_paper":
+        return JSONResponse(
+            {"error": "bot_not_in_tv_paper_mode"},
+            status_code=409,
+        )
+
+    # 6. Check bot is running
+    if not state.get("bot_running"):
+        return JSONResponse({"error": "bot_not_running"}, status_code=409)
+
+    # 7. Enqueue signal (file IPC — run_tv_paper_trading.py drains this)
+    from dashboard.bot_state import STATE_FILE, _lock as _bs_lock
+    import threading as _threading
+
+    with _bs_lock:
+        try:
+            s = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            s = {}
+        queue = s.get("pending_tv_signals", [])
+        # Cap queue at 10 to prevent runaway accumulation
+        if len(queue) >= 10:
+            return JSONResponse({"error": "queue_full"}, status_code=503)
+        # Strip secret before storing
+        signal = {k: v for k, v in body.items() if k != "secret"}
+        signal["queued_at"] = datetime.now().isoformat(timespec="seconds")
+        queue.append(signal)
+        s["pending_tv_signals"] = queue
+        STATE_FILE.write_text(json.dumps(s, indent=2), encoding="utf-8")
+
+    return {"ok": True, "queued": True, "queue_depth": len(queue)}
+
+
 # ── IBKR live account balance ─────────────────────────────────────────────────
 
 @app.get("/api/ibkr/balance")
@@ -550,10 +689,10 @@ _extensive_running = False
 
 @app.post("/api/run_extensive_backtest")
 async def run_extensive_backtest():
-    """Trigger the full ORB+FHB extensive backtest from the browser."""
+    """Trigger the comprehensive backtest (walk-forward + Monte Carlo + sensitivity)."""
     global _extensive_running
     if _extensive_running:
-        return {"status": "running", "message": "Extensive backtest already in progress."}
+        return {"status": "running", "message": "Backtest already in progress."}
     _extensive_running = True
 
     async def _run():
@@ -561,7 +700,7 @@ async def run_extensive_backtest():
         try:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
-                str(PROJECT_ROOT / "scripts" / "run_extensive_backtest.py"),
+                str(PROJECT_ROOT / "scripts" / "run_comprehensive_backtest.py"),
                 cwd=str(PROJECT_ROOT),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -573,7 +712,7 @@ async def run_extensive_backtest():
             _extensive_running = False
 
     asyncio.create_task(_run())
-    return {"status": "started", "message": "Full backtest started. Takes ~2 minutes. Dashboard will auto-update."}
+    return {"status": "started", "message": "Comprehensive backtest started. Takes ~3–5 min. Dashboard will auto-update."}
 
 
 @app.get("/api/extensive_backtest_status")
@@ -591,8 +730,10 @@ _bot_proc: "subprocess.Popen | None" = None
 @app.post("/api/bot/launch")
 async def bot_launch():
     """
-    Actually launch scripts/run_paper_trading.py as a background process.
-    Output is written to logs/bot_YYYY-MM-DD.log alongside the bot's own prints.
+    Launch the trading loop as a background process.
+    - trading_mode == 'ibkr'     → scripts/run_paper_trading.py  (requires TWS)
+    - trading_mode == 'tv_paper' → scripts/run_tv_paper_trading.py (no TWS needed)
+    Output is written to logs/bot_YYYY-MM-DD.log.
     Returns 409 if a managed process is already alive.
     """
     global _bot_proc
@@ -601,20 +742,40 @@ async def bot_launch():
             {"ok": False, "error": f"Bot already running (PID {_bot_proc.pid}). Stop it first."},
             status_code=409,
         )
+
+    trading_mode = get_trading_mode()
+    if trading_mode == "tv_paper":
+        script_name = "run_tv_paper_trading.py"
+    else:
+        script_name = "run_paper_trading.py"
+
+    script_path = PROJECT_ROOT / "scripts" / script_name
+    if not script_path.exists():
+        return JSONResponse(
+            {"ok": False, "error": f"Script not found: {script_name}"},
+            status_code=500,
+        )
+
     log_dir = PROJECT_ROOT / "logs"
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / f"bot_{datetime.now().strftime('%Y-%m-%d')}.log"
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     with open(log_path, "a", encoding="utf-8") as lf:
         _bot_proc = subprocess.Popen(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "run_paper_trading.py")],
+            [sys.executable, str(script_path)],
             cwd=str(PROJECT_ROOT),
             env=env,
             stdout=lf,
             stderr=lf,
         )
     set_bot_running(True)
-    return {"ok": True, "pid": _bot_proc.pid, "log": log_path.name}
+    return {
+        "ok":           True,
+        "pid":          _bot_proc.pid,
+        "log":          log_path.name,
+        "trading_mode": trading_mode,
+        "script":       script_name,
+    }
 
 
 @app.post("/api/bot/kill")
@@ -650,62 +811,72 @@ async def bot_proc_status():
 
 # ── Script registry & terminal WebSocket ──────────────────────────────────────
 
+# reloads        = True  → server reloads the trades.json cache on completion
+# reloads_client = list  → client reloads these data sources and re-renders relevant tabs
+#   values: "summary" | "strategies" | "validation" | "cl_trades" | "sc_results"
 _SCRIPTS: dict[str, dict] = {
-    "fhb": {
-        "path":     "scripts/run_fhb_backtest.py",
-        "label":    "FHB Backtest",
-        "desc":     "First Hour Breakout — ES + NQ, 603 days",
-        "duration": "~90s",
-        "reloads":  False,
-    },
-    "orb": {
-        "path":     "scripts/run_orb_backtest.py",
-        "label":    "ORB Backtest",
-        "desc":     "Opening Range Breakout — 49 days, gap filter",
-        "duration": "~30s",
-        "reloads":  False,
-    },
-    "replay": {
-        "path":     "scripts/run_signal_replay.py",
-        "label":    "Signal Replay",
-        "desc":     "Replay last 60 days — FHB + ORB combined",
-        "duration": "~120s",
-        "reloads":  True,
-    },
-    "validation": {
-        "path":     "scripts/run_validation_report.py",
-        "label":    "Validation Report",
-        "desc":     "Walk-forward, stress tests, anti-overfitting",
-        "duration": "~180s",
-        "reloads":  False,
-    },
-    "extensive": {
-        "path":     "scripts/run_extensive_backtest.py",
-        "label":    "Extensive Backtest",
-        "desc":     "Combined ORB + FHB + Swing full run",
-        "duration": "~120s",
-        "reloads":  True,
-    },
-    "swing": {
-        "path":     "scripts/run_phase5_swing_validation.py",
-        "label":    "Swing Validation",
-        "desc":     "Phase 5 swing strategy — IS / OOS report",
-        "duration": "~60s",
-        "reloads":  False,
-    },
-    "backup": {
-        "path":     "scripts/create_backup.py",
-        "label":    "Create Backup",
-        "desc":     "Encrypt & backup to D:\\AlgoBot_Backups",
-        "duration": "~10s",
-        "reloads":  False,
+    "comprehensive": {
+        "path":           "scripts/run_comprehensive_backtest.py",
+        "label":          "Comprehensive Backtest",
+        "desc":           "Walk-forward + Monte Carlo + Sensitivity — FHB (NQ/MNQ) + GC Fade (MGC) on all available data",
+        "duration":       "~3–5 min",
+        "reloads":        False,
+        "reloads_client": ["comprehensive"],
+        "result_tab":     "validation",
     },
     "sc_backtest": {
-        "path":     "scripts/run_sc_backtest.py",
-        "label":    "SC Real-Data Backtest",
-        "desc":     "FHB + ORB on Sierra Charts futures data — NQ, MNQ, GC, MGC, CL",
-        "duration": "~120s",
-        "reloads":  False,
+        "path":           "scripts/run_sc_backtest.py",
+        "label":          "SC Real-Data OOS Check",
+        "desc":           "FHB on Sierra Charts live futures (NQ, GC, MGC) — quick out-of-sample confirmation",
+        "duration":       "~2 min",
+        "reloads":        False,
+        "reloads_client": ["sc_results"],
+        "result_tab":     "esnq",
+    },
+    "fhb": {
+        "path":           "scripts/run_fhb_backtest.py",
+        "label":          "FHB Backtest (Yahoo Finance)",
+        "desc":           "First Hour Breakout — NQ, full Yahoo Finance history (730d intraday)",
+        "duration":       "~90s",
+        "reloads":        False,
+        "reloads_client": ["fhb_latest"],
+        "result_tab":     "esnq",
+    },
+    "validation_suite": {
+        "path":           "scripts/run_validation_suite.py",
+        "label":          "Legacy Validation Suite",
+        "desc":           "10-check validation suite (legacy — prefer Comprehensive Backtest above)",
+        "duration":       "~3min",
+        "reloads":        False,
+        "reloads_client": ["validation"],
+        "result_tab":     "validation",
+    },
+    "dashboard_data": {
+        "path":           "scripts/generate_dashboard_data.py",
+        "label":          "Refresh Dashboard Data",
+        "desc":           "Regenerate trade cache for Overview tab charts",
+        "duration":       "~90s",
+        "reloads":        True,
+        "reloads_client": ["summary", "strategies"],
+        "result_tab":     "overview",
+    },
+    "replay": {
+        "path":           "scripts/run_signal_replay.py",
+        "label":          "Signal Replay",
+        "desc":           "Replay last 60 days of FHB signals, update dashboard cache",
+        "duration":       "~120s",
+        "reloads":        True,
+        "reloads_client": ["summary", "strategies"],
+        "result_tab":     "overview",
+    },
+    "backup": {
+        "path":           "scripts/create_backup.py",
+        "label":          "Create Backup",
+        "desc":           "Encrypt and backup project files",
+        "duration":       "~10s",
+        "reloads":        False,
+        "reloads_client": [],
+        "result_tab":     None,
     },
 }
 
@@ -782,7 +953,14 @@ async def terminal_ws(websocket: WebSocket):
         if meta.get("reloads"):
             _reload_cache()
 
-        await websocket.send_json({"type": "done", "exit_code": exit_code})
+        await websocket.send_json({
+            "type":           "done",
+            "exit_code":      exit_code,
+            "script":         script_key,
+            "label":          meta["label"],
+            "reloads_client": meta.get("reloads_client", []),
+            "result_tab":     meta.get("result_tab"),
+        })
 
     except asyncio.TimeoutError:
         try:
@@ -806,15 +984,71 @@ async def terminal_ws(websocket: WebSocket):
 
 # ── Sierra Charts backtest results ────────────────────────────────────────────
 
-SC_LATEST = PROJECT_ROOT / "reports" / "backtests" / "sc_backtest_latest.json"
+SC_LATEST       = PROJECT_ROOT / "reports" / "backtests" / "sc_backtest_latest.json"
+BACKTEST_DIR    = PROJECT_ROOT / "reports" / "backtests"
+CL_CSV          = BACKTEST_DIR / "cl_fhb_trades.csv"
+
+
+@app.get("/api/validation/latest")
+async def validation_latest():
+    """Return the most recent validation suite results (10-check per-strategy report)."""
+    jsons = sorted(BACKTEST_DIR.glob("validation_*.json"))
+    if not jsons:
+        return JSONResponse(
+            {"error": "No validation results found. Run the Validation Suite from Terminal."},
+            status_code=404,
+        )
+    try:
+        data = json.loads(jsons[-1].read_text(encoding="utf-8"))
+        return data
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to read validation results: {e}"}, status_code=500)
+
+
+@app.get("/api/cl/trades")
+async def cl_trades_api():
+    """Return CL crude oil trades from the latest backtest CSV."""
+    if not CL_CSV.exists():
+        return JSONResponse(
+            {"error": "No CL trades found. Run CL Oil Backtest from Terminal."},
+            status_code=404,
+        )
+    try:
+        df = pd.read_csv(CL_CSV)
+        return df.fillna("").to_dict(orient="records")
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to read CL trades: {e}"}, status_code=500)
+
+
+@app.get("/api/cl/backtest_latest")
+async def cl_backtest_latest():
+    """Return aggregate metrics from the most recent CL oil backtest JSON."""
+    p = BACKTEST_DIR / "cl_backtest_latest.json"
+    if not p.exists():
+        return JSONResponse(
+            {"error": "No CL backtest results. Run CL Oil Backtest from Terminal."},
+            status_code=404,
+        )
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to read CL backtest: {e}"}, status_code=500)
+
+
+_validation_running = False
+
+
+@app.get("/api/validation_status")
+async def validation_status():
+    return {"running": _validation_running}
 
 
 @app.get("/api/sc/results")
 async def sc_results():
     """
-    Return the most recent Sierra Charts real-data backtest results.
-    Reads reports/backtests/sc_backtest_latest.json which is written by
-    scripts/run_sc_backtest.py after every run.
+    Return SC backtest results as a flat ``results`` array.
+    Transforms the grouped fhb_by_market / orb_by_market dicts into the
+    flat list the dashboard JS expects: [{market, strategy, ...metrics}].
     """
     if not SC_LATEST.exists():
         return JSONResponse(
@@ -823,39 +1057,272 @@ async def sc_results():
         )
     try:
         payload = json.loads(SC_LATEST.read_text(encoding="utf-8"))
-        return payload
+        results = []
+        for strategy_key, by_market in [
+            ("FHB", payload.get("fhb_by_market", {})),
+            ("ORB", payload.get("orb_by_market", {})),
+        ]:
+            if isinstance(by_market, dict):
+                for market, metrics in by_market.items():
+                    if isinstance(metrics, dict) and metrics.get("total_trades", 0) > 0:
+                        results.append({"market": market, "strategy": strategy_key, **metrics})
+        return {
+            "results":      results,
+            "generated_at": payload.get("generated_at"),
+            "data_source":  payload.get("data_source", "Sierra Charts"),
+        }
     except Exception as e:
         return JSONResponse({"error": f"Failed to read SC results: {e}"}, status_code=500)
+
+
+# ── Comprehensive backtest results ─────────────────────────────────────────────
+
+COMPREHENSIVE_FILE = BACKTEST_DIR / "comprehensive_latest.json"
+
+
+@app.get("/api/comprehensive/latest")
+async def comprehensive_latest():
+    """Return the most recent comprehensive backtest results (walk-forward, MC, sensitivity)."""
+    if not COMPREHENSIVE_FILE.exists():
+        return JSONResponse(
+            {"error": "No comprehensive results. Run 'Comprehensive Backtest' from Terminal."},
+            status_code=404,
+        )
+    try:
+        return json.loads(COMPREHENSIVE_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to read comprehensive results: {e}"}, status_code=500)
+
+
+# ── FHB / ORB latest backtest results ─────────────────────────────────────────
+
+def _csv_metrics(df: pd.DataFrame, pnl_col: str = "pnl_net") -> dict:
+    """Compute summary metrics from a trade dataframe."""
+    if df.empty:
+        return {}
+    pnl  = df[pnl_col].astype(float)
+    n    = len(pnl)
+    wins = pnl[pnl > 0]
+    loss = pnl[pnl < 0]
+    nw, nl = len(wins), len(loss)
+    gw = float(wins.sum()) if nw else 0.0
+    gl = float(abs(loss.sum())) if nl else 0.0
+    return {
+        "n_trades":     n,
+        "n_wins":       nw,
+        "n_losses":     nl,
+        "win_rate":     round(nw / n * 100, 1) if n else 0.0,
+        "profit_factor": round(gw / gl, 2) if gl > 0 else 999.0,
+        "total_pnl":    round(float(pnl.sum()), 2),
+        "avg_win":      round(float(wins.mean()), 2) if nw else 0.0,
+        "avg_loss":     round(float(loss.mean()), 2) if nl else 0.0,
+        "best_trade":   round(float(pnl.max()), 2),
+        "worst_trade":  round(float(pnl.min()), 2),
+    }
+
+
+def _latest_csv_response(glob_pattern: str, label: str):
+    csvs = sorted(BACKTEST_DIR.glob(glob_pattern))
+    if not csvs:
+        return JSONResponse(
+            {"error": f"No {label} results found. Run {label} Backtest from Terminal."},
+            status_code=404,
+        )
+    try:
+        df  = pd.read_csv(csvs[-1])
+        out = {
+            "file":      csvs[-1].name,
+            "n_files":   len(csvs),
+            "metrics":   _csv_metrics(df),
+            "by_market": {},
+        }
+        if "market" in df.columns:
+            for mkt in sorted(df["market"].unique()):
+                out["by_market"][str(mkt)] = _csv_metrics(df[df["market"] == mkt])
+        return out
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/fhb/latest")
+async def fhb_latest():
+    """Return summary stats from the most recent FHB backtest CSV."""
+    return _latest_csv_response("fhb_5d_improved_*.csv", "FHB")
+
+
+@app.get("/api/orb/latest")
+async def orb_latest():
+    """Return summary stats from the most recent ORB backtest CSV."""
+    return _latest_csv_response("orb_backtest_*.csv", "ORB")
+
+
+# ── Live trading endpoints ─────────────────────────────────────────────────────
+
+@app.get("/api/live/trades")
+async def live_trades(token: str = None, request: Request = None):
+    """
+    Return today's closed trades from the live TradeDB (SQLite).
+    Populated in real time as IBKR fills arrive during paper trading.
+    """
+    if not DB_PATH.exists():
+        return {"trades": [], "summary": None, "message": "No trade database found. Start paper trading first."}
+    try:
+        import sqlite3
+        from datetime import date as _date
+        today = str(_date.today())
+        conn  = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cur   = conn.execute(
+            "SELECT * FROM trades WHERE DATE(exit_time) = ? ORDER BY exit_time DESC",
+            (today,)
+        )
+        rows  = [dict(r) for r in cur.fetchall()]
+        conn.close()
+
+        wins   = sum(1 for r in rows if float(r.get("pnl_net", 0) or 0) > 0)
+        losses = sum(1 for r in rows if float(r.get("pnl_net", 0) or 0) < 0)
+        total_pnl = sum(float(r.get("pnl_net", 0) or 0) for r in rows)
+        gw  = sum(float(r.get("pnl_net", 0) or 0) for r in rows if float(r.get("pnl_net", 0) or 0) > 0)
+        gl  = abs(sum(float(r.get("pnl_net", 0) or 0) for r in rows if float(r.get("pnl_net", 0) or 0) < 0))
+        pf  = round(gw / gl, 2) if gl > 0 else None
+
+        return {
+            "date":   today,
+            "trades": rows,
+            "summary": {
+                "total":     len(rows),
+                "wins":      wins,
+                "losses":    losses,
+                "total_pnl": round(total_pnl, 2),
+                "profit_factor": pf,
+            }
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/live/positions")
+async def live_positions():
+    """
+    Return current open positions from bot_state.json plus account state
+    (trailing DD, consecutive losses, size multiplier) from account_state.json.
+    Updated every ~5 seconds by the paper trading loop.
+    """
+    try:
+        state = get_state()
+        positions = state.get("open_positions", [])
+
+        # Read persistent account state (trailing DD, consecutive losses)
+        acct = {}
+        acct_path = PROJECT_ROOT / "data" / "account_state.json"
+        if acct_path.exists():
+            try:
+                acct = json.loads(acct_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        peak    = float(acct.get("peak_balance",    50_000.0))
+        start   = float(acct.get("starting_balance", 50_000.0))
+        cum_pnl = float(acct.get("cumulative_pnl",   0.0))
+        current = start + cum_pnl
+        dd_used = max(peak - current, 0.0)
+        streak  = int(acct.get("consecutive_losses", 0))
+        if streak >= 3:
+            size_mult = 0.25
+        elif streak == 2:
+            size_mult = 0.50
+        else:
+            size_mult = 1.0
+
+        return {
+            "positions":         positions,
+            "count":             len(positions),
+            "bot_running":       state.get("bot_running", False),
+            "daily_pnl":         state.get("daily_pnl", 0.0),
+            "daily_trades":      state.get("daily_trades", 0),
+            "daily_wins":        state.get("daily_wins", 0),
+            "daily_losses":      state.get("daily_losses", 0),
+            "risk_mode":         state.get("risk_mode", "safe"),
+            "last_updated":      state.get("last_updated", ""),
+            "account_state": {
+                "peak_balance":      round(peak, 2),
+                "current_balance":   round(current, 2),
+                "cumulative_pnl":    round(cum_pnl, 2),
+                "trailing_dd_used":  round(dd_used, 2),
+                "trailing_dd_limit": 1_800.0,
+                "consecutive_losses": streak,
+                "size_mult":          size_mult,
+            },
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/account/state")
+async def account_state_endpoint():
+    """Return persistent account state (trailing DD, consecutive losses, size mult)."""
+    acct_path = PROJECT_ROOT / "data" / "account_state.json"
+    if not acct_path.exists():
+        return {
+            "peak_balance": 50_000.0, "current_balance": 50_000.0,
+            "cumulative_pnl": 0.0, "trailing_dd_used": 0.0,
+            "trailing_dd_limit": 1_800.0, "consecutive_losses": 0, "size_mult": 1.0,
+        }
+    try:
+        acct    = json.loads(acct_path.read_text(encoding="utf-8"))
+        peak    = float(acct.get("peak_balance",    50_000.0))
+        start   = float(acct.get("starting_balance", 50_000.0))
+        cum_pnl = float(acct.get("cumulative_pnl",   0.0))
+        current = start + cum_pnl
+        dd_used = max(peak - current, 0.0)
+        streak  = int(acct.get("consecutive_losses", 0))
+        size_mult = 0.25 if streak >= 3 else (0.50 if streak == 2 else 1.0)
+        return {
+            "peak_balance":       round(peak, 2),
+            "current_balance":    round(current, 2),
+            "cumulative_pnl":     round(cum_pnl, 2),
+            "trailing_dd_used":   round(dd_used, 2),
+            "trailing_dd_limit":  1_800.0,
+            "consecutive_losses": streak,
+            "size_mult":          size_mult,
+            "last_updated":       acct.get("last_updated", ""),
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ── System health ──────────────────────────────────────────────────────────────
 
 @app.get("/api/system/health")
 async def system_health():
-    """Fast system health check: TWS socket probe, cache, DB, bot state."""
+    """Fast system health check: TWS socket probe (ibkr mode only), cache, DB, bot state."""
     import socket as _sock
 
-    # TWS port probe (non-blocking, 0.8s timeout — never actually connects to IB)
-    tws_ok = False
-    try:
-        s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
-        s.settimeout(0.8)
-        tws_ok = s.connect_ex(("127.0.0.1", 7497)) == 0
-        s.close()
-    except Exception:
-        pass
+    state        = get_state()
+    trading_mode = state.get("trading_mode", "ibkr")
+
+    # TWS port probe — skip entirely in tv_paper mode (no TWS required)
+    if trading_mode == "tv_paper":
+        tws_info = {"connected": None, "port": 7497, "skipped": True,
+                    "reason": "tv_paper mode — TWS not required"}
+    else:
+        tws_ok = False
+        try:
+            s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+            s.settimeout(0.8)
+            tws_ok = s.connect_ex(("127.0.0.1", 7497)) == 0
+            s.close()
+        except Exception:
+            pass
+        tws_info = {"connected": tws_ok, "port": 7497, "skipped": False}
 
     data      = _load_cache()
     cache_ok  = CACHE_FILE.exists()
     n_trades  = len(data.get("trades", []))
     gen_at    = data.get("generated_at")
-    state     = get_state()
 
     return {
-        "tws": {
-            "connected": tws_ok,
-            "port":      7497,
-        },
+        "tws": tws_info,
         "cache": {
             "ready":        cache_ok,
             "n_trades":     n_trades,
@@ -866,12 +1333,80 @@ async def system_health():
             "path":  str(DB_PATH.name),
         },
         "bot": {
-            "running":   state.get("bot_running", False),
-            "risk_mode": state.get("risk_mode", "safe"),
-            "paper_mode": state.get("paper_mode", True),
-            "daily_pnl": state.get("daily_pnl", 0.0),
+            "running":      state.get("bot_running", False),
+            "risk_mode":    state.get("risk_mode", "safe"),
+            "paper_mode":   state.get("paper_mode", True),
+            "daily_pnl":    state.get("daily_pnl", 0.0),
+            "trading_mode": trading_mode,
         },
         "backtest_running": _backtest_running or _extensive_running,
         "server_time": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+# ── Monitor / bot process health ──────────────────────────────────────────────
+
+@app.get("/api/health/monitor")
+async def monitor_health():
+    """
+    Lightweight health check for the paper trading monitor loop.
+    Returns liveness signal based on bot_state.json recency and open positions.
+    Safe to poll frequently (reads only from the JSON state file — no DB hit).
+    """
+    state       = get_state()
+    bot_running = state.get("bot_running", False)
+    last_updated_raw = state.get("last_updated", "")
+    open_positions   = state.get("open_positions", [])
+    pending_signals  = len(state.get("pending_tv_signals", []))
+    trading_mode     = state.get("trading_mode", "ibkr")
+
+    # Compute staleness of last_updated timestamp
+    staleness_s: int | None = None
+    if last_updated_raw:
+        try:
+            last_dt = datetime.fromisoformat(last_updated_raw)
+            staleness_s = int((datetime.now() - last_dt).total_seconds())
+        except Exception:
+            pass
+
+    # Heuristic: monitor is "healthy" if bot claims to be running and
+    # bot_state was updated within the last 2 minutes (two loop cycles).
+    monitor_healthy = (
+        bot_running
+        and trading_mode == "tv_paper"
+        and staleness_s is not None
+        and staleness_s < 120
+    )
+
+    # Check webhook log for most recent received signal
+    webhook_log = PROJECT_ROOT / "logs" / "webhook_signals.jsonl"
+    last_signal_at: str | None = None
+    if webhook_log.exists():
+        try:
+            lines = webhook_log.read_text(encoding="utf-8").splitlines()
+            if lines:
+                last_entry = json.loads(lines[-1])
+                last_signal_at = last_entry.get("drained_at")
+        except Exception:
+            pass
+
+    return {
+        "monitor": {
+            "healthy":       monitor_healthy,
+            "bot_running":   bot_running,
+            "trading_mode":  trading_mode,
+            "staleness_s":   staleness_s,
+            "stale_threshold_s": 120,
+        },
+        "positions": {
+            "open_count":    len(open_positions),
+            "open":          open_positions,
+        },
+        "queue": {
+            "pending_signals": pending_signals,
+            "last_signal_at":  last_signal_at,
+        },
+        "last_updated": last_updated_raw,
+        "server_time":  datetime.now().isoformat(timespec="seconds"),
     }
 

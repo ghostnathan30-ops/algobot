@@ -219,27 +219,42 @@ def classify_regimes(
 
     df = df.copy()
 
-    regimes         = []
-    size_mults      = []
-    trend_actives   = []
-    vmr_actives     = []
+    adx_trending  = float(config.get("adx_trending_threshold",  25.0))
+    adx_ranging   = float(config.get("adx_ranging_threshold",   20.0))
+    high_vol_mult = float(config.get("high_vol_atr_multiplier",  1.5))
+    crisis_mult   = float(config.get("crisis_atr_multiplier",    2.5))
 
-    for i in range(len(df)):
-        result = classify_regime(
-            adx=df["adx"].iloc[i],
-            atr=df["atr"].iloc[i],
-            atr_baseline=df["atr_baseline"].iloc[i],
-            config=config,
-        )
-        regimes.append(result.state.value)
-        size_mults.append(result.size_multiplier)
-        trend_actives.append(result.trend_signals_active)
-        vmr_actives.append(result.vmr_active)
+    adx   = df["adx"]
+    ratio = df["atr_ratio"]
 
-    df["regime"]          = regimes
-    df["size_multiplier"] = size_mults
-    df["trend_active"]    = trend_actives
-    df["vmr_active"]      = vmr_actives
+    # NaN mask: any invalid input → TRANSITIONING (same as original classify_regime)
+    nan_mask = (adx.isna() | df["atr"].isna() | df["atr_baseline"].isna()
+                | (df["atr_baseline"] <= 0))
+
+    # Priority order: CRISIS > HIGH_VOL > TRENDING > RANGING > TRANSITIONING
+    conditions = [
+        ratio >= crisis_mult,
+        ratio >= high_vol_mult,
+        adx >= adx_trending,
+        adx < adx_ranging,
+    ]
+    choices = [
+        RegimeState.CRISIS.value,
+        RegimeState.HIGH_VOL.value,
+        RegimeState.TRENDING.value,
+        RegimeState.RANGING.value,
+    ]
+    regimes = np.select(conditions, choices, default=RegimeState.TRANSITIONING.value)
+    regimes = np.where(nan_mask, RegimeState.TRANSITIONING.value, regimes)
+
+    df["regime"] = regimes
+
+    # Derive size_multiplier, trend_active, vmr_active from regime
+    is_crisis_or_trans = np.isin(regimes, [RegimeState.CRISIS.value, RegimeState.TRANSITIONING.value])
+    is_high_vol        = (regimes == RegimeState.HIGH_VOL.value)
+    df["size_multiplier"] = np.where(is_crisis_or_trans, 0.0, np.where(is_high_vol, 0.5, 1.0))
+    df["trend_active"]    = np.isin(regimes, [RegimeState.TRENDING.value, RegimeState.HIGH_VOL.value])
+    df["vmr_active"]      = (regimes == RegimeState.RANGING.value)
 
     # Log regime distribution
     regime_counts = df["regime"].value_counts()

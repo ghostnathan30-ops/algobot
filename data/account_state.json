@@ -1,0 +1,10 @@
+{
+  "starting_balance": 50000.0,
+  "peak_balance": 57858.45,
+  "cumulative_pnl": 7858.45,
+  "daily_pnl": {
+    "2026-03-30": 7858.45
+  },
+  "consecutive_losses": 0,
+  "last_updated": "2026-03-30T04:59:15"
+}

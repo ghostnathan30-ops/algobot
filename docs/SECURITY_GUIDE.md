@@ -113,18 +113,22 @@ C:\Users\ghost\Documents\Claude Workflow\Trading\AlgoBot\
 │   ├── restore_backup.py           ← Decrypt and restore
 │   ├── setup_dashboard_auth.py     ← Change dashboard password
 │   ├── generate_dashboard_data.py  ← Regenerate dashboard cache
-│   ├── run_paper_trading.py        ← Live IBKR paper trading
-│   ├── run_signal_replay.py        ← Historical signal replay
-│   ├── run_extensive_backtest.py   ← Full multi-period backtest
-│   ├── run_combined_backtest.py    ← ORB + FHB combined
-│   ├── run_fhb_backtest.py         ← FHB 1-hour strategy
-│   ├── run_orb_backtest.py         ← ORB 5-min strategy
-│   └── run_phase5_swing_validation.py ← 25-year swing validation
+│   ├── start_trading_day.sh        ← Mac daily launcher (tunnel + dashboard)
+│   ├── start_bot.ps1               ← Windows launcher
+│   ├── run_tv_paper_trading.py     ← TradingView paper trading (no IBKR)
+│   ├── run_paper_trading.py        ← IBKR paper trading (requires TWS)
+│   ├── run_comprehensive_backtest.py ← 6-layer validation
+│   ├── run_validation_suite.py     ← Monte Carlo + walk-forward
+│   ├── run_sc_backtest.py          ← Sierra Charts OOS backtest
+│   ├── run_fhb_backtest.py         ← FHB strategy backtest
+│   └── run_signal_replay.py        ← Historical signal replay
 │
 ├── src/
 │   ├── strategy/                   ← Signal logic (safe)
 │   ├── backtest/                   ← Engine and metrics (safe)
 │   ├── execution/
+│   │   ├── paper_simulator.py      ← TV paper mode (no IBKR)
+│   │   ├── tv_data_feed.py         ← yfinance live data
 │   │   ├── ibkr_bridge.py          ← IBKR connection (reads .env)
 │   │   └── live_signal_engine.py   ← Real-time signals
 │   └── utils/                      ← Data pipeline (safe)

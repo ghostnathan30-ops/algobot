@@ -1,0 +1,365 @@
+{
+  "generated_at": "2026-03-27T17:50:46.045070",
+  "data_ranges": {
+    "NQ": "2023-11-03 to 2026-03-18 [SC+YF]",
+    "MNQ": "2023-11-03 to 2026-03-18 [SC+YF]",
+    "MGC": "2023-10-27 to 2026-03-18 [SC+YF]",
+    "GC": "2023-10-27 to 2026-03-18 [SC+YF]"
+  },
+  "strategies": {
+    "FHB_NQ_MNQ": {
+      "label": "FHB_NQ_MNQ",
+      "baseline": {
+        "market": "FHB_NQ_MNQ",
+        "n_trades": 208,
+        "win_rate_pct": 63.5,
+        "profit_factor": 2.87,
+        "avg_win_usd": 706.17,
+        "avg_loss_usd": -427.07,
+        "win_loss_ratio": 1.65,
+        "total_net_pnl": 60757.42,
+        "max_drawdown_usd": -7565.47,
+        "avg_daily_pnl": 478.4,
+        "sharpe": 5.61,
+        "years_tested": 2.4,
+        "date_start": "2023-11-06",
+        "date_end": "2026-03-17",
+        "trading_days": 127
+      },
+      "walk_forward": {
+        "windows": [
+          {
+            "window": 1,
+            "is_n": 26,
+            "oos_n": 26,
+            "is_pf": 2.136,
+            "oos_pf": 1.676,
+            "ratio": 0.784,
+            "oos_positive": true
+          },
+          {
+            "window": 2,
+            "is_n": 52,
+            "oos_n": 26,
+            "is_pf": 1.84,
+            "oos_pf": 5.205,
+            "ratio": 2.829,
+            "oos_positive": true
+          },
+          {
+            "window": 3,
+            "is_n": 78,
+            "oos_n": 26,
+            "is_pf": 2.472,
+            "oos_pf": 6.744,
+            "ratio": 2.728,
+            "oos_positive": true
+          },
+          {
+            "window": 4,
+            "is_n": 104,
+            "oos_n": 26,
+            "is_pf": 3.484,
+            "oos_pf": 0.895,
+            "ratio": 0.257,
+            "oos_positive": false
+          },
+          {
+            "window": 5,
+            "is_n": 130,
+            "oos_n": 26,
+            "is_pf": 2.245,
+            "oos_pf": 2.443,
+            "ratio": 1.088,
+            "oos_positive": true
+          },
+          {
+            "window": 6,
+            "is_n": 156,
+            "oos_n": 26,
+            "is_pf": 2.288,
+            "oos_pf": 7.492,
+            "ratio": 3.274,
+            "oos_positive": true
+          },
+          {
+            "window": 7,
+            "is_n": 182,
+            "oos_n": 26,
+            "is_pf": 2.842,
+            "oos_pf": 3.133,
+            "ratio": 1.102,
+            "oos_positive": true
+          }
+        ],
+        "avg_oos_pf": 3.941,
+        "avg_ratio": 1.723,
+        "all_oos_positive": false,
+        "pass": false
+      },
+      "monte_carlo": {
+        "p05_pf": 1.924,
+        "median_pf": 2.966,
+        "p95_pf": 4.368,
+        "ruin_prob": 0.0235,
+        "pvalue": 1.0,
+        "block_size": 20,
+        "n_iter": 10000,
+        "ruin_limit_usd": -6000.0,
+        "pass": false
+      },
+      "param_sensitivity": {
+        "win_scales": [
+          0.7,
+          0.8,
+          0.9,
+          1.0,
+          1.1
+        ],
+        "loss_scales": [
+          1.0,
+          1.1,
+          1.2,
+          1.3,
+          1.4
+        ],
+        "grid": [
+          [
+            2.01,
+            1.828,
+            1.675,
+            1.546,
+            1.436
+          ],
+          [
+            2.298,
+            2.089,
+            1.915,
+            1.767,
+            1.641
+          ],
+          [
+            2.585,
+            2.35,
+            2.154,
+            1.988,
+            1.846
+          ],
+          [
+            2.872,
+            2.611,
+            2.393,
+            2.209,
+            2.051
+          ],
+          [
+            3.159,
+            2.872,
+            2.633,
+            2.43,
+            2.257
+          ]
+        ],
+        "stress_pf": 1.546,
+        "cells_positive": 25,
+        "pass": true
+      },
+      "psr": {
+        "sharpe": 5.634,
+        "psr": 1.0,
+        "skewness": 0.967,
+        "excess_kurtosis": 0.385,
+        "n_daily_obs": 127,
+        "bonf_threshold": 0.475,
+        "pass": true
+      },
+      "verdict": "WARN",
+      "verdict_score": "6/8 checks passed"
+    },
+    "GC_MGC_REV": {
+      "label": "GC_MGC_REV",
+      "baseline": {
+        "market": "GC_MGC_REV",
+        "n_trades": 673,
+        "win_rate_pct": 45.9,
+        "profit_factor": 1.22,
+        "avg_win_usd": 515.81,
+        "avg_loss_usd": -361.9,
+        "win_loss_ratio": 1.43,
+        "total_net_pnl": 28380.01,
+        "max_drawdown_usd": -24801.39,
+        "avg_daily_pnl": 86.52,
+        "sharpe": 1.0,
+        "years_tested": 2.4,
+        "date_start": "2023-10-31",
+        "date_end": "2026-03-17",
+        "trading_days": 328
+      },
+      "walk_forward": {
+        "windows": [
+          {
+            "window": 1,
+            "is_n": 84,
+            "oos_n": 84,
+            "is_pf": 0.95,
+            "oos_pf": 0.817,
+            "ratio": 0.86,
+            "oos_positive": false
+          },
+          {
+            "window": 2,
+            "is_n": 168,
+            "oos_n": 84,
+            "is_pf": 0.858,
+            "oos_pf": 1.152,
+            "ratio": 1.343,
+            "oos_positive": true
+          },
+          {
+            "window": 3,
+            "is_n": 252,
+            "oos_n": 84,
+            "is_pf": 0.959,
+            "oos_pf": 3.225,
+            "ratio": 3.363,
+            "oos_positive": true
+          },
+          {
+            "window": 4,
+            "is_n": 336,
+            "oos_n": 84,
+            "is_pf": 1.267,
+            "oos_pf": 1.063,
+            "ratio": 0.839,
+            "oos_positive": true
+          },
+          {
+            "window": 5,
+            "is_n": 420,
+            "oos_n": 84,
+            "is_pf": 1.196,
+            "oos_pf": 0.968,
+            "ratio": 0.81,
+            "oos_positive": false
+          },
+          {
+            "window": 6,
+            "is_n": 504,
+            "oos_n": 84,
+            "is_pf": 1.151,
+            "oos_pf": 1.745,
+            "ratio": 1.516,
+            "oos_positive": true
+          },
+          {
+            "window": 7,
+            "is_n": 588,
+            "oos_n": 84,
+            "is_pf": 1.274,
+            "oos_pf": 1.08,
+            "ratio": 0.847,
+            "oos_positive": true
+          },
+          {
+            "window": 8,
+            "is_n": 672,
+            "oos_n": 1,
+            "is_pf": 1.205,
+            "oos_pf": 10.0,
+            "ratio": 8.299,
+            "oos_positive": true
+          }
+        ],
+        "avg_oos_pf": 2.506,
+        "avg_ratio": 2.235,
+        "all_oos_positive": false,
+        "pass": false
+      },
+      "monte_carlo": {
+        "p05_pf": 0.993,
+        "median_pf": 1.213,
+        "p95_pf": 1.489,
+        "ruin_prob": 0.3461,
+        "pvalue": 1.0,
+        "block_size": 67,
+        "n_iter": 10000,
+        "ruin_limit_usd": -6000.0,
+        "pass": false
+      },
+      "param_sensitivity": {
+        "win_scales": [
+          0.7,
+          0.8,
+          0.9,
+          1.0,
+          1.1
+        ],
+        "loss_scales": [
+          1.0,
+          1.1,
+          1.2,
+          1.3,
+          1.4
+        ],
+        "grid": [
+          [
+            0.852,
+            0.774,
+            0.71,
+            0.655,
+            0.608
+          ],
+          [
+            0.973,
+            0.885,
+            0.811,
+            0.749,
+            0.695
+          ],
+          [
+            1.095,
+            0.995,
+            0.912,
+            0.842,
+            0.782
+          ],
+          [
+            1.217,
+            1.106,
+            1.014,
+            0.936,
+            0.869
+          ],
+          [
+            1.338,
+            1.217,
+            1.115,
+            1.029,
+            0.956
+          ]
+        ],
+        "stress_pf": 0.655,
+        "cells_positive": 8,
+        "pass": false
+      },
+      "psr": {
+        "sharpe": 1.003,
+        "psr": 1.0,
+        "skewness": 0.852,
+        "excess_kurtosis": 11.091,
+        "n_daily_obs": 328,
+        "bonf_threshold": 0.475,
+        "pass": true
+      },
+      "verdict": "FAIL",
+      "verdict_score": "3/8 checks passed"
+    }
+  },
+  "portfolio": {
+    "n_trades": 881,
+    "win_rate_pct": 50.1,
+    "profit_factor": 1.55,
+    "total_net_pnl": 89137.43,
+    "max_drawdown_usd": -24801.39
+  }
+}

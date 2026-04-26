@@ -51,6 +51,8 @@ to prevent dependency conflicts between AlgoBot and any other Python projects on
 
 ## Method & Steps
 
+## The author is Nathan-Blaise MIHINDU MI NZAMBE
+
 Follow these steps **in exact order**. Each step has a verification check.
 
 ---

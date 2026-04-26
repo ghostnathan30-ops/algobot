@@ -386,7 +386,7 @@ body::before {
       <div class="section-title"><span class="dot"></span> Risk Mode</div>
       <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
         Choose how aggressively the bot sizes positions. All modes use the same profitable
-        strategy (PF 2.19 | Win 62.6%). The difference is <strong style="color:var(--text-2)">position size and daily risk caps</strong>.
+        strategy (FHB PF 2.87 | Win 63.5%). The difference is <strong style="color:var(--text-2)">position size and daily risk caps</strong>.
         Scaling up a profitable system amplifies both wins and losses proportionally.
         Hardcore mode remains within Topstep's $4,500 daily limit with a $700 buffer.
       </p>
@@ -408,7 +408,7 @@ body::before {
         <div class="mode-card medium-card" id="card-medium" onclick="selectMode('medium')">
           <span class="mode-icon">⚖️</span>
           <div class="mode-name">Medium</div>
-          <div class="mode-desc">Proven backtest configuration. Current PF 2.19 | 62.6% win | Max DD -$6.4k over 2 years.</div>
+          <div class="mode-desc">Standard configuration. FHB PF 2.87 | 63.5% win | Max DD -$7.6k (v3 comprehensive backtest).</div>
           <div class="mode-stat"><span class="k">Risk/trade</span><span class="v">1.0% equity</span></div>
           <div class="mode-stat"><span class="k">Max contracts</span><span class="v">3</span></div>
           <div class="mode-stat"><span class="k">Daily cap</span><span class="v">$2,500</span></div>
@@ -433,21 +433,49 @@ body::before {
 
     <hr class="divider">
 
-    <!-- ── SECTION 2: Account ── -->
+    <!-- ── SECTION 2: Trading Mode ── -->
+    <div class="section">
+      <div class="section-title"><span class="dot"></span> Trading Mode</div>
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
+        <strong style="color:var(--brand);">TradingView Paper</strong> mode is active — no IBKR TWS required.
+        TradingView Pine Script alerts fire JSON webhooks to this bot via ngrok.
+        Positions are tracked internally and priced via yfinance.
+      </p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <button class="btn btn-brand" id="btn-mode-tv" onclick="setTradingMode('tv_paper')" style="min-width:180px;">
+          📡 TradingView Paper
+        </button>
+        <button class="btn" id="btn-mode-ibkr" onclick="setTradingMode('ibkr')" style="min-width:180px;">
+          IBKR TWS (legacy)
+        </button>
+        <span style="font-size:11px;color:var(--text-3);" id="trading-mode-label">Active: TradingView Paper</span>
+      </div>
+      <div id="tv-paper-info" style="background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.18);border-radius:8px;padding:12px;font-size:11px;color:var(--text-2);line-height:1.8;">
+        <strong style="color:var(--brand);">Webhook endpoint:</strong>
+        <code style="color:var(--text-1);font-family:var(--mono);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:4px;">POST /api/webhook/signal</code><br>
+        <strong>Secret:</strong> set in <code style="font-family:var(--mono);">config/config.yaml → tv_paper.webhook_secret</code><br>
+        <strong>Signals from:</strong> FHB NQ LONG ONLY — market entry at bar close (v4 Pine) · Short side disabled (PF=0.918) · GC/ORB/CL disabled<br>
+        <strong>Position monitor:</strong> yfinance polls every 60s · EOD settle at 16:05 ET<br>
+        <strong>Risk protection:</strong> Trailing DD halts at $1,800 · Consecutive losses auto-reduce size (2→0.5x, 3+→0.25x)
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── SECTION 3: Account ── -->
     <div class="section">
       <div class="section-title"><span class="dot"></span> Account Configuration</div>
       <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
-        The bot reads your live IBKR account balance to compute position sizes dynamically.
-        As your account grows, position sizes grow with it automatically.
-        You can override the balance manually (useful for Topstep evaluation accounts).
+        Paper account balance used for position sizing. Defaults to $50,000 (Topstep evaluation).
+        Override if you want to simulate a different account size.
       </p>
 
       <div class="account-row" style="margin-bottom:20px;">
         <div>
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">Live IBKR Balance</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">Paper Account Balance</div>
           <div class="account-balance-display" id="live-balance">
-            Connecting...
-            <span class="ibkr-tag" id="balance-tag">checking TWS port 7497</span>
+            $50,000
+            <span class="ibkr-tag" id="balance-tag" style="color:var(--brand);">TradingView Paper</span>
           </div>
         </div>
 
@@ -455,12 +483,12 @@ body::before {
           <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">Manual Override</div>
           <div class="input-group">
             <input type="number" class="input-field" id="override-input"
-                   placeholder="e.g. 150000" min="1000" step="1000">
+                   placeholder="e.g. 50000" min="1000" step="1000">
             <button class="btn btn-brand" onclick="setOverride()">Set</button>
-            <button class="btn" onclick="clearOverride()">Use IBKR Live</button>
+            <button class="btn" onclick="clearOverride()">Reset to $50k</button>
           </div>
           <div style="font-size:10px;color:var(--text-3);margin-top:5px;" id="override-status">
-            No override set — using live IBKR balance
+            No override — using $50,000 paper account
           </div>
         </div>
       </div>
@@ -530,15 +558,16 @@ body::before {
     <div class="section">
       <div class="section-title"><span class="dot"></span> Bot Controls</div>
       <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;line-height:1.7;">
-        Start or stop the live paper trading engine. The bot will use the active Risk Mode
-        and account balance above. TWS must be running on port 7497.
+        Launch the paper trading engine. It will poll for TradingView webhook signals every 5 seconds
+        and manage open positions via yfinance until 4:05 PM ET.
+        Make sure ngrok is running and TradingView alerts are configured.
       </p>
 
       <div class="control-row" style="margin-bottom:20px;">
-        <button class="btn btn-start" id="btn-start" onclick="botStart()">
-          ▶ Start Paper Trading
+        <button class="btn btn-start" id="btn-start" onclick="botLaunch()">
+          ▶ Launch Bot
         </button>
-        <button class="btn btn-stop" id="btn-stop" onclick="botStop()">
+        <button class="btn btn-stop" id="btn-stop" onclick="botKill()">
           ■ Stop Bot
         </button>
         <div style="font-size:11px;color:var(--text-3);" id="bot-status-label">
@@ -599,8 +628,8 @@ body::before {
         <div class="flag-row">
           <input type="checkbox" id="flag-consec" onchange="setFlag('consecutive_loss_pause', this.checked)">
           <div>
-            <div class="flag-label">Consecutive Loss Pause</div>
-            <div class="flag-desc">After 3 consecutive losses on the same day, pause trading for the rest of the session. Reduces tilt.</div>
+            <div class="flag-label">Consecutive Loss Full Pause</div>
+            <div class="flag-desc">After 3 consecutive losses, stop all new signals for the day. Note: AccountState already auto-reduces size (2 losses→0.5x, 3+→0.25x) regardless of this flag.</div>
           </div>
         </div>
         <div class="flag-row">
@@ -619,7 +648,7 @@ body::before {
   <div class="card anim" style="margin-top:20px;" id="projection-card">
     <div class="card-title">Projected Performance — All Risk Modes (1 contract baseline × mode multiplier)</div>
     <p style="font-size:11px;color:var(--text-3);margin-bottom:16px;">
-      Based on verified backtest: 470 trades | 62.6% win | PF 2.19 | +$144,701 over 259 days.
+      Based on verified backtest (comprehensive_latest.json, 2026-03-27): FHB 208 trades | 63.5% win | PF 2.87 | +$60,757 over 2.4 years.
       Scaling a profitable system amplifies P&L linearly; PF and win rate stay identical.
     </p>
     <div style="overflow-x:auto;">
@@ -642,9 +671,9 @@ body::before {
           <td style="padding:10px;text-align:right;font-family:var(--mono);">1</td>
           <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--profit);">+$559</td>
           <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--profit);">+$140k</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$6.4k</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.19</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);">62.6%</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$7.6k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.87</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">63.5%</td>
           <td style="padding:10px;color:var(--text-2);">~$30k</td>
         </tr>
         <tr style="border-bottom:1px solid var(--border);">
@@ -652,9 +681,9 @@ body::before {
           <td style="padding:10px;text-align:right;font-family:var(--mono);">2–3</td>
           <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--amber);">+$1,118–$1,677</td>
           <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--amber);">+$281k–$422k</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$12.8k–$19.2k</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.19</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);">62.6%</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$15.2k–$22.8k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.87</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">63.5%</td>
           <td style="padding:10px;color:var(--text-2);">~$60–90k</td>
         </tr>
         <tr>
@@ -662,9 +691,9 @@ body::before {
           <td style="padding:10px;text-align:right;font-family:var(--mono);">4–5</td>
           <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">+$2,236–$2,795</td>
           <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">+$563k–$704k</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$25.6k–$32k</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.19</td>
-          <td style="padding:10px;text-align:right;font-family:var(--mono);">62.6%</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);color:var(--loss);">-$30.4k–$38k</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">2.87</td>
+          <td style="padding:10px;text-align:right;font-family:var(--mono);">63.5%</td>
           <td style="padding:10px;color:var(--text-2);">~$120–150k</td>
         </tr>
       </tbody>
@@ -683,7 +712,8 @@ body::before {
 ================================================================ */
 
 let currentState = {};
-let ibkrBalance  = null;
+let ibkrBalance  = null;   // kept for legacy ibkr mode compat
+const TV_PAPER_BALANCE = 50000;
 
 // ── Toast ────────────────────────────────────────────────────────
 function toast(msg, type='ok') {
@@ -706,21 +736,24 @@ async function loadState() {
 
 function renderState(s) {
   // Status bar
-  const running = s.bot_running;
+  const running     = s.bot_running;
+  const tradingMode = s.trading_mode || 'tv_paper';
+
   document.getElementById('stat-status').innerHTML = running
     ? '<span class="running-pill on"><span class="pulse"></span>RUNNING</span>'
     : '<span class="running-pill off"><span class="pulse"></span>STOPPED</span>';
 
-  const mode = s.risk_mode || 'medium';
+  const mode = s.risk_mode || 'safe';
   const modeColors = { safe: 'green', medium: 'amber', hardcore: 'red' };
   const modeEl = document.getElementById('stat-mode');
   modeEl.textContent = mode.toUpperCase();
-  modeEl.className   = `value ${modeColors[mode] || 'amber'}`;
+  modeEl.className   = `value ${modeColors[mode] || 'green'}`;
 
+  // Balance: override > TV paper default ($50k) or IBKR live
   const eff = s.account_override
     ? s.account_override
-    : (ibkrBalance !== null ? ibkrBalance : null);
-  document.getElementById('stat-balance').textContent = eff ? '$' + eff.toLocaleString() : '—';
+    : (tradingMode === 'tv_paper' ? TV_PAPER_BALANCE : (ibkrBalance || TV_PAPER_BALANCE));
+  document.getElementById('stat-balance').textContent = '$' + eff.toLocaleString();
 
   const pnl = s.daily_pnl || 0;
   const pnlEl = document.getElementById('stat-pnl');
@@ -738,9 +771,7 @@ function renderState(s) {
   ['safe','medium','hardcore'].forEach(m => {
     const card = document.getElementById('card-' + m);
     if (!card) return;
-    // Remove old active classes
     card.className = card.className.replace(/\s*active-\w+/, '').replace(/\s*has-badge/, '');
-    // Remove existing badge
     const old = card.querySelector('.active-badge');
     if (old) old.remove();
     if (m === mode) {
@@ -755,9 +786,20 @@ function renderState(s) {
   // Bot control buttons
   document.getElementById('btn-start').disabled = running;
   document.getElementById('btn-stop').disabled  = !running;
+  const modeLabel = tradingMode === 'tv_paper' ? 'TradingView Paper' : 'IBKR TWS';
   document.getElementById('bot-status-label').textContent = running
-    ? `Bot is RUNNING in ${mode.toUpperCase()} mode — paper trading active`
-    : 'Bot is stopped. Click Start to begin paper trading.';
+    ? `Bot is RUNNING · ${modeLabel} · ${mode.toUpperCase()} risk mode`
+    : `Bot is stopped. Click Launch to start in ${modeLabel} mode.`;
+
+  // Trading mode buttons
+  const tvBtn   = document.getElementById('btn-mode-tv');
+  const ibkrBtn = document.getElementById('btn-mode-ibkr');
+  if (tvBtn && ibkrBtn) {
+    tvBtn.className   = tradingMode === 'tv_paper' ? 'btn btn-brand' : 'btn';
+    ibkrBtn.className = tradingMode === 'ibkr'     ? 'btn btn-brand' : 'btn';
+    const lbl = document.getElementById('trading-mode-label');
+    if (lbl) lbl.textContent = 'Active: ' + (tradingMode === 'tv_paper' ? 'TradingView Paper' : 'IBKR TWS');
+  }
 
   // Override display
   if (s.account_override) {
@@ -765,18 +807,32 @@ function renderState(s) {
     document.getElementById('override-status').textContent = `Override active: $${s.account_override.toLocaleString()}`;
   } else {
     document.getElementById('override-input').value = '';
-    document.getElementById('override-status').textContent = 'No override — using live IBKR balance';
+    document.getElementById('override-status').textContent =
+      tradingMode === 'tv_paper'
+        ? 'No override — using $50,000 paper account'
+        : 'No override — using live IBKR balance';
   }
 
   // Effective balance for sizing
-  const effBal = s.account_override || ibkrBalance || 150000;
+  const effBal = s.account_override ||
+    (tradingMode === 'tv_paper' ? TV_PAPER_BALANCE : (ibkrBalance || TV_PAPER_BALANCE));
   document.getElementById('effective-balance').textContent = '$' + effBal.toLocaleString();
   document.getElementById('calc-account').value = effBal;
   runCalc();
 }
 
-// ── Load IBKR balance ────────────────────────────────────────────
-async function loadIBKRBalance() {
+// ── Load account balance (TV paper: show config balance; ibkr: poll TWS) ─────
+async function loadAccountBalance() {
+  const tradingMode = (currentState.trading_mode) || 'tv_paper';
+  if (tradingMode === 'tv_paper') {
+    const bal = currentState.account_override || TV_PAPER_BALANCE;
+    document.getElementById('live-balance').childNodes[0].textContent =
+      '$' + bal.toLocaleString(undefined, {minimumFractionDigits:2});
+    document.getElementById('balance-tag').textContent = 'TradingView Paper';
+    document.getElementById('balance-tag').style.color = 'var(--brand)';
+    return;
+  }
+  // IBKR mode fallback
   try {
     const r = await fetch('/api/ibkr/balance');
     const d = await r.json();
@@ -785,9 +841,11 @@ async function loadIBKRBalance() {
       document.getElementById('live-balance').childNodes[0].textContent =
         '$' + d.balance.toLocaleString(undefined, {minimumFractionDigits:2});
       document.getElementById('balance-tag').textContent = 'Live from IBKR TWS';
+      document.getElementById('balance-tag').style.color = '';
     } else {
       document.getElementById('live-balance').childNodes[0].textContent = 'Not connected';
       document.getElementById('balance-tag').textContent = d.error || 'TWS not running on port 7497';
+      document.getElementById('balance-tag').style.color = 'var(--loss)';
     }
   } catch(e) {
     document.getElementById('live-balance').childNodes[0].textContent = 'Error';
@@ -835,7 +893,7 @@ async function clearOverride() {
       body: JSON.stringify({ balance: null }),
     });
     const d = await r.json();
-    if (d.ok) { toast('Override cleared — using live IBKR balance', 'ok'); await loadState(); }
+    if (d.ok) { toast('Override cleared — using $50,000 paper account', 'ok'); await loadState(); }
     else       { toast(d.error || 'Failed', 'err'); }
   } catch(e) { toast('Network error', 'err'); }
 }
@@ -862,16 +920,49 @@ async function runCalc() {
   } catch(e) { /* offline — skip */ }
 }
 
-// ── Bot start/stop ───────────────────────────────────────────────
-async function botStart() {
-  const r = await fetch('/api/bot/start', { method: 'POST' });
-  const d = await r.json();
-  if (d.ok) { toast('Bot started — paper trading active', 'ok'); await loadState(); }
-  else       { toast('Failed to start', 'err'); }
+// ── Trading mode toggle ──────────────────────────────────────────
+async function setTradingMode(mode) {
+  try {
+    const r = await fetch('/api/bot/set_mode', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Trading mode: ${mode === 'tv_paper' ? 'TradingView Paper' : 'IBKR TWS'}`, 'ok');
+      await loadState();
+      await loadAccountBalance();
+    } else {
+      toast(d.error || 'Failed to set mode', 'err');
+    }
+  } catch(e) { toast('Network error', 'err'); }
 }
 
-async function botStop() {
-  const r = await fetch('/api/bot/stop', { method: 'POST' });
+// ── Bot launch/kill ──────────────────────────────────────────────
+async function botLaunch() {
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true;
+  btn.textContent = 'Launching...';
+  try {
+    const r = await fetch('/api/bot/launch', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Bot launched (PID ${d.pid}) · ${d.script}`, 'ok');
+      await loadState();
+    } else {
+      toast(d.error || 'Failed to launch', 'err');
+      btn.disabled = false;
+      btn.textContent = '▶ Launch Bot';
+    }
+  } catch(e) {
+    toast('Network error', 'err');
+    btn.disabled = false;
+    btn.textContent = '▶ Launch Bot';
+  }
+}
+
+async function botKill() {
+  const r = await fetch('/api/bot/kill', { method: 'POST' });
   const d = await r.json();
   if (d.ok) { toast('Bot stopped', 'ok'); await loadState(); }
   else       { toast('Failed to stop', 'err'); }
@@ -883,13 +974,13 @@ async function runExtensive() {
   const lbl  = document.getElementById('backtest-status-label');
   btn.disabled = true;
   btn.innerHTML = '<span class="mini-spin"></span> Running...';
-  lbl.textContent = 'Backtest running... takes ~2 minutes. Dashboard will update automatically.';
+  lbl.textContent = 'Comprehensive backtest running... takes ~3–5 minutes. Dashboard will update automatically.';
 
   try {
     const r = await fetch('/api/run_extensive_backtest', { method: 'POST' });
     const d = await r.json();
     if (d.status === 'started') {
-      toast('Backtest started — check dashboard in ~2 min', 'ok');
+      toast('Backtest started — check dashboard in ~5 min', 'ok');
       pollBacktest();
     } else {
       toast(d.message || 'Already running', 'ok');
@@ -959,11 +1050,11 @@ async function setFlag(flagKey, value) {
 
 // ── Init ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadIBKRBalance();
-  await loadState();
+  await loadState();           // load trading_mode before rendering balance
+  await loadAccountBalance();  // renders correct balance for the active mode
   await loadFlags();
-  // Refresh state every 10 seconds
   setInterval(loadState, 10000);
+  setInterval(loadAccountBalance, 30000);
 });
 </script>
 </body>

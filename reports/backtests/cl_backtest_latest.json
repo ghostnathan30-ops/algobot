@@ -1,0 +1,48 @@
+{
+  "generated_at": "2026-03-22T13:56:26.293370",
+  "market": "CL",
+  "strategy": "CL_FHB",
+  "is_metrics": {
+    "dataset": "IS",
+    "n_trades": 38,
+    "win_rate": 84.2,
+    "profit_factor": 3.309,
+    "total_pnl": 6034.76,
+    "avg_daily_pnl": 158.81,
+    "avg_win": 270.27,
+    "avg_loss": 435.62,
+    "wl_ratio": 0.62,
+    "max_drawdown": -1054.53,
+    "final_equity": 56034.76,
+    "sharpe_annual": 8.32,
+    "trading_days": 38,
+    "partial_rate": 78.9,
+    "annual": {
+      "2023": 2266.59,
+      "2024": 947.16,
+      "2025": 2544.51,
+      "2026": 276.5
+    },
+    "exit_reasons": {
+      "target_full": 16,
+      "stop_partial": 11,
+      "time_exit": 7,
+      "stop_full": 4
+    }
+  },
+  "oos_metrics": {},
+  "gls_analysis": {
+    "90-100": {
+      "n": 38,
+      "win_pct": 84.2,
+      "pf": 3.309,
+      "total_pnl": 6034.76
+    },
+    "all": {
+      "n": 38,
+      "win_pct": 84.2,
+      "pf": 3.309,
+      "total_pnl": 6034.76
+    }
+  }
+}

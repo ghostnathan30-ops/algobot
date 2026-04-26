@@ -1,0 +1,133 @@
+//@version=6
+// AlgoBot — VWAP Trend Pullback Strategy  v1
+// Chart: NQ1! or ES1! — 15m timeframe  (use MNQ1!/MES1! for micros)
+// Logic:
+//   1. Price must be trending (≥ trend_bars_required consecutive bars above/below VWAP)
+//   2. Price pulls back to within touch_threshold % of VWAP
+//   3. Bar closes in trend direction (green bar for long, red for short)
+//   4. Entry: market at bar close. Stop: bar_low − ATR×0.3 (long) / bar_high + ATR×0.3 (short)
+//   5. Partial exit at 1R (50%), full target at 2R
+//   6. Only during signal window: 10:00–14:00 ET
+//   7. No overnight — flat before 16:00 ET
+// Webhook fires alert JSON to the bot on each signal.
+strategy("AlgoBot VWAP Pullback Strategy v1", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+webhook_secret = input.string("CHANGE_ME_RANDOM_SECRET_HERE", "Webhook Secret")
+market         = input.string("NQ", "Market", options=["NQ","MNQ","ES","MES"])
+risk_mode      = input.string("safe", "Risk Mode", options=["safe","medium","hardcore"])
+max_cts        = input.int(1, "Max Contracts", minval=1, maxval=5)
+size_mult      = input.float(1.0, "Size Multiplier", minval=0.1, maxval=3.0, step=0.1)
+trend_bars_req = input.int(3, "Trend Bars Required", minval=2, maxval=8)
+touch_thresh   = input.float(0.15, "VWAP Touch Threshold %", minval=0.05, maxval=0.50, step=0.05)
+stop_atr_mult  = input.float(0.30, "Stop ATR Mult", minval=0.10, maxval=1.0, step=0.05)
+target_r       = input.float(2.0, "Target R", minval=1.0, maxval=4.0, step=0.25)
+partial_r      = input.float(1.0, "Partial Exit R", minval=0.5, maxval=2.0, step=0.25)
+gls_score      = input.int(70, "GLS Score", minval=0, maxval=100)
+
+// ── Session windows (timezone-safe — works on all timeframes) ─────────────────
+is_signal_bar = not na(time(timeframe.period, "1000-1400", "America/New_York"))
+is_flat_bar   = not na(time(timeframe.period, "1559-1600", "America/New_York"))
+
+// ── Daily state reset ─────────────────────────────────────────────────────────
+var bool fired_long  = false
+var bool fired_short = false
+
+if dayofweek != dayofweek[1]
+    fired_long  := false
+    fired_short := false
+
+// ── Daily anchored VWAP — resets each session ─────────────────────────────────
+var float cum_tpv  = 0.0
+var float cum_vol  = 0.0
+var float cum_tp2v = 0.0
+
+if dayofweek != dayofweek[1]
+    cum_tpv  := 0.0
+    cum_vol  := 0.0
+    cum_tp2v := 0.0
+
+tp        = (high + low + close) / 3.0
+cum_tpv  += tp * volume
+cum_vol  += volume
+vwap      = cum_vol > 0 ? cum_tpv / cum_vol : na
+
+// ── Volume-weighted SD bands (proper formula) ─────────────────────────────────
+cum_tp2v += tp * tp * volume
+vwap_var  = cum_vol > 0 ? (cum_tp2v / cum_vol) - vwap * vwap : 0.0
+vwap_sd   = math.sqrt(math.max(vwap_var, 0.0))
+sd1_up    = vwap + vwap_sd
+sd1_dn    = vwap - vwap_sd
+sd2_up    = vwap + 2 * vwap_sd
+sd2_dn    = vwap - 2 * vwap_sd
+
+// ── Trend detection: consecutive bars above/below VWAP ────────────────────────
+var int bars_above = 0
+var int bars_below = 0
+
+if not na(vwap)
+    bars_above := close > vwap ? bars_above + 1 : 0
+    bars_below := close < vwap ? bars_below + 1 : 0
+
+bull_trending = bars_above >= trend_bars_req
+bear_trending = bars_below >= trend_bars_req
+htf_bias      = bull_trending ? "BULL" : bear_trending ? "BEAR" : "NEUTRAL"
+
+// ── ATR ───────────────────────────────────────────────────────────────────────
+atr14 = ta.atr(14)
+
+// ── Touch + bounce detection ──────────────────────────────────────────────────
+// near_vwap: bar low came within touch_thresh % of VWAP (pullback touched zone)
+near_vwap = not na(vwap) and math.abs(low - vwap) / vwap * 100 <= touch_thresh
+
+// Long pullback: trending bull, price touched VWAP zone, bar closed up (bounce)
+pb_long  = is_signal_bar and barstate.isconfirmed and bull_trending and near_vwap and close > open and not fired_long
+// Short pullback: trending bear, price touched VWAP zone, bar closed down (bounce short)
+pb_short = is_signal_bar and barstate.isconfirmed and bear_trending and near_vwap and close < open and not fired_short
+
+// ── Entry / stop / target ─────────────────────────────────────────────────────
+long_entry  = close
+long_stop   = low  - atr14 * stop_atr_mult
+long_risk   = long_entry - long_stop
+long_tp1    = long_entry + long_risk * partial_r
+long_target = long_entry + long_risk * target_r
+
+short_entry  = close
+short_stop   = high + atr14 * stop_atr_mult
+short_risk   = short_stop - short_entry
+short_tp1    = short_entry - short_risk * partial_r
+short_target = short_entry - short_risk * target_r
+
+// ── Alerts + strategy entries ─────────────────────────────────────────────────
+if pb_long
+    fired_long := true
+    strategy.entry("VWAP PB Long", strategy.long, qty=max_cts)
+    strategy.exit("VWAP PB Long TP1",  "VWAP PB Long", qty_percent=50,  limit=long_tp1,   stop=long_stop)
+    strategy.exit("VWAP PB Long Full", "VWAP PB Long", qty_percent=100, limit=long_target, stop=long_stop)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"VWAP_PB","direction":"LONG","entry":' + str.tostring(math.round(long_entry, 2)) + ',"stop":' + str.tostring(math.round(long_stop, 2)) + ',"target":' + str.tostring(math.round(long_target, 2)) + ',"tp1":' + str.tostring(math.round(long_tp1, 2)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+if pb_short
+    fired_short := true
+    strategy.entry("VWAP PB Short", strategy.short, qty=max_cts)
+    strategy.exit("VWAP PB Short TP1",  "VWAP PB Short", qty_percent=50,  limit=short_tp1,   stop=short_stop)
+    strategy.exit("VWAP PB Short Full", "VWAP PB Short", qty_percent=100, limit=short_target, stop=short_stop)
+    msg = '{"secret":"' + webhook_secret + '","market":"' + market + '","strategy":"VWAP_PB","direction":"SHORT","entry":' + str.tostring(math.round(short_entry, 2)) + ',"stop":' + str.tostring(math.round(short_stop, 2)) + ',"target":' + str.tostring(math.round(short_target, 2)) + ',"tp1":' + str.tostring(math.round(short_tp1, 2)) + ',"size_mult":' + str.tostring(size_mult) + ',"gls_score":' + str.tostring(gls_score) + ',"htf_bias":"' + htf_bias + '","risk_mode":"' + risk_mode + '","max_contracts":' + str.tostring(max_cts) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+// ── Flat before close ─────────────────────────────────────────────────────────
+if is_flat_bar and strategy.position_size != 0
+    strategy.close_all(comment="EOD Flat")
+
+// ── Visuals ───────────────────────────────────────────────────────────────────
+plot(vwap,   "VWAP",       color=color.blue,                        linewidth=2)
+plot(sd1_up, "SD1 Upper",  color=color.new(color.blue, 60),         linewidth=1)
+plot(sd1_dn, "SD1 Lower",  color=color.new(color.blue, 60),         linewidth=1)
+plot(sd2_up, "SD2 Upper",  color=color.new(color.red,  60),         linewidth=1)
+plot(sd2_dn, "SD2 Lower",  color=color.new(color.red,  60),         linewidth=1)
+
+plotshape(pb_long,  title="VWAP PB LONG",  location=location.belowbar, color=color.green, style=shape.triangleup,   size=size.small)
+plotshape(pb_short, title="VWAP PB SHORT", location=location.abovebar, color=color.red,   style=shape.triangledown, size=size.small)
+
+// Subtle background: show trending regime
+bgcolor(bull_trending ? color.new(color.green, 95) : bear_trending ? color.new(color.red, 95) : na, title="Trending Regime")

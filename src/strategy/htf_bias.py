@@ -220,30 +220,22 @@ def _compute_combined_bias(
     Returns:
         Series "htf_combined_bias" with values BULL / BEAR / NEUTRAL.
     """
-    combined = pd.Series(NEUTRAL, index=weekly_bias.index, name="htf_combined_bias")
-
-    for idx in weekly_bias.index:
-        wb = weekly_bias.loc[idx]
-        mb = monthly_bias.loc[idx]
-
-        if require_monthly_agreement:
-            # Strict: both must agree
-            if wb == BULL and mb == BULL:
-                combined.loc[idx] = BULL
-            elif wb == BEAR and mb == BEAR:
-                combined.loc[idx] = BEAR
-            else:
-                combined.loc[idx] = NEUTRAL
-        else:
-            # Relaxed: weekly leads, monthly only vetoes direct contradictions
-            if wb == BULL:
-                combined.loc[idx] = NEUTRAL if mb == BEAR else BULL
-            elif wb == BEAR:
-                combined.loc[idx] = NEUTRAL if mb == BULL else BEAR
-            else:
-                # Weekly is NEUTRAL — check monthly for any directional signal
-                combined.loc[idx] = mb
-
+    if require_monthly_agreement:
+        # Strict: both must agree for BULL or BEAR
+        both_bull = (weekly_bias == BULL)  & (monthly_bias == BULL)
+        both_bear = (weekly_bias == BEAR)  & (monthly_bias == BEAR)
+        combined  = pd.Series(NEUTRAL, index=weekly_bias.index, name="htf_combined_bias")
+        combined  = combined.mask(both_bull, BULL).mask(both_bear, BEAR)
+    else:
+        # Relaxed: weekly leads, monthly only vetoes direct contradictions
+        # Start with weekly bias as base
+        combined = weekly_bias.copy().rename("htf_combined_bias")
+        # weekly=BULL but monthly=BEAR → veto to NEUTRAL
+        combined = combined.mask((weekly_bias == BULL) & (monthly_bias == BEAR), NEUTRAL)
+        # weekly=BEAR but monthly=BULL → veto to NEUTRAL
+        combined = combined.mask((weekly_bias == BEAR) & (monthly_bias == BULL), NEUTRAL)
+        # weekly=NEUTRAL → use monthly direction
+        combined = combined.mask(weekly_bias == NEUTRAL, monthly_bias)
     return combined
 
 

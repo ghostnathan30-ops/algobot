@@ -109,6 +109,77 @@ def add_daily_vwap(df: pd.DataFrame, price_col: str = "Close",
     return df
 
 
+def add_vwap_sd_bands(df: pd.DataFrame,
+                      price_col: str = "Close",
+                      volume_col: str = "Volume",
+                      n_sd: int = 3) -> pd.DataFrame:
+    """
+    Add proper volume-weighted VWAP standard deviation bands (daily anchored).
+
+    This uses the institutional-grade formula:
+        Var  = Σ(V × TP²) / Σ(V)  −  VWAP²
+        SD   = sqrt(max(Var, 0))
+
+    Where TP = (High + Low + Close) / 3 (typical price).
+    The formula accounts for the volume distribution of price, not just
+    price volatility — SD bands expand when high volume occurs far from VWAP.
+
+    This is mathematically superior to ATR-based VWAP bands because:
+        - ATR bands ignore WHERE in the day the volatility occurred
+        - Volume-weighted variance captures the true spread of traded value
+        - ±2SD contains the value area (roughly equivalent to VAH/VAL)
+
+    Usage in vwap_signal.py:
+        df = add_daily_vwap(df)          # compute vwap first
+        df = add_vwap_sd_bands(df)       # then proper SD bands
+        entry_at_2sd = df['Close'] > df['vwap_sd2_upper']
+
+    Args:
+        df:         DataFrame with DatetimeIndex, OHLCV columns, and 'vwap' column
+                    (add_daily_vwap must be called first).
+        price_col:  Close price column (default 'Close').
+        volume_col: Volume column (default 'Volume').
+        n_sd:       Number of SD bands to compute (1, 2, 3). Default 3.
+
+    Returns:
+        df copy with new columns (for i in 1..n_sd):
+          vwap_sd{i}_upper  -- VWAP + i × daily_sd
+          vwap_sd{i}_lower  -- VWAP − i × daily_sd
+    """
+    df = df.copy()
+
+    if "vwap" not in df.columns:
+        raise ValueError("add_daily_vwap() must be called before add_vwap_sd_bands()")
+
+    if "High" in df.columns and "Low" in df.columns:
+        typical = (df["High"] + df["Low"] + df[price_col]) / 3.0
+    else:
+        typical = df[price_col]
+
+    vol = df[volume_col].copy().clip(lower=1)
+
+    # Daily group key
+    if hasattr(df.index, "normalize"):
+        day_key = df.index.normalize()
+    else:
+        day_key = pd.Series(df.index).dt.normalize().values
+
+    # Cumulative sum of V × TP² and V per day
+    tp2v = typical ** 2 * vol
+    cum_tp2v = tp2v.groupby(day_key).cumsum()
+    cum_vol  = vol.groupby(day_key).cumsum()
+
+    # Variance = E[TP²] − E[TP]² (where E is volume-weighted expectation)
+    variance = (cum_tp2v / cum_vol) - df["vwap"] ** 2
+    sd = np.sqrt(variance.clip(lower=0)).round(4)
+
+    for i in range(1, n_sd + 1):
+        df[f"vwap_sd{i}_upper"] = (df["vwap"] + i * sd).round(4)
+        df[f"vwap_sd{i}_lower"] = (df["vwap"] - i * sd).round(4)
+
+    return df
+
+
 def add_synthetic_delta(df: pd.DataFrame,
                         volume_col: str = "Volume",
                         reset_daily: bool = True) -> pd.DataFrame:

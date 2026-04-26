@@ -14,6 +14,8 @@
 *.secret
 secrets/
 credentials.json
+dashboard/config/auth.json    # JWT secret + password hash — never commit
+.tailscale_url                # cached Tailscale tunnel URL (local state, not a secret)
 
 # ------------------------------------------------------------
 # PYTHON — Auto-generated files
@@ -74,6 +76,7 @@ reports/live/*.html
 reports/live/*.csv
 
 # Logs (generated at runtime)
+logs/*.log
 logs/
 *.log
 
@@ -101,6 +104,11 @@ Thumbs.db
 # ------------------------------------------------------------
 desktop.ini
 $RECYCLE.BIN/
+
+# ------------------------------------------------------------
+# AI TOOLS
+# ------------------------------------------------------------
+.claude/
 
 # ------------------------------------------------------------
 # WHAT IS COMMITTED (everything else)
